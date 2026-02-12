@@ -1,0 +1,108 @@
+AI STEM KARAOKE STUDIO
+LOCAL DEVELOPMENT SETUP GUIDE
+================================
+
+IMPORTANT:
+This project requires Python 3.11 and FFmpeg installed on the system.
+Do NOT use Python 3.13.
+
+------------------------------------------------
+1. INSTALL PYTHON 3.11
+------------------------------------------------
+Download from:
+https://www.python.org/downloads/
+
+During installation:
+✔ Check "Add Python to PATH"
+
+Verify:
+py -3.11 --version
+
+------------------------------------------------
+2. INSTALL FFMPEG (REQUIRED)
+------------------------------------------------
+Demucs cannot decode MP3 files without FFmpeg.
+
+Download from:
+https://github.com/BtbN/FFmpeg-Builds/releases
+
+Download:
+ffmpeg-master-latest-win64-gpl-shared.zip
+
+Extract to:
+C:\ffmpeg
+
+Final structure must be:
+C:\ffmpeg\bin\ffmpeg.exe
+
+Add this to System PATH:
+C:\ffmpeg\bin
+
+Restart VS Code after adding.
+
+Verify installation:
+ffmpeg -version
+
+If version info appears → SUCCESS.
+
+------------------------------------------------
+3. CLONE PROJECT
+------------------------------------------------
+git clone <repo-url>
+cd ai-stem-karaoke-studio
+
+------------------------------------------------
+4. CREATE VIRTUAL ENVIRONMENT
+------------------------------------------------
+py -3.11 -m venv venv
+
+Activate:
+
+Windows:
+venv\Scripts\activate
+
+Verify:
+python --version
+
+Must show:
+Python 3.11.x
+
+------------------------------------------------
+5. INSTALL DEPENDENCIES
+------------------------------------------------
+pip install --upgrade pip
+pip install -r requirements.txt
+
+------------------------------------------------
+6. RUN APPLICATION
+------------------------------------------------
+python app.py
+
+Open:
+http://127.0.0.1:5000
+
+------------------------------------------------
+IMPORTANT RULES
+------------------------------------------------
+• Always activate venv before running project.
+• Never run project using global Python.
+• Do not commit uploads/ or separated/ folders.
+• If errors occur, delete venv and recreate it.
+• If audio fails to load, check FFmpeg installation.
+
+------------------------------------------------
+WHY FFMPEG IS REQUIRED
+------------------------------------------------
+Demucs uses torchaudio.
+Torchaudio depends on FFmpeg to decode MP3/WAV files.
+Without FFmpeg installed system-wide,
+audio decoding will fail.
+
+------------------------------------------------
+SYSTEM REQUIREMENTS
+------------------------------------------------
+Minimum:
+- Windows 10/11
+- Python 3.11
+- 8GB RAM recommended
+- FFmpeg installed

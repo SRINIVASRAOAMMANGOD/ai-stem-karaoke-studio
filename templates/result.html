@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stems</title>
+</head>
+<body>
+    <h2>Separated Stems</h2>
+
+    <audio controls src="{{ url_for('serve_separated_file', filename=folder + '/vocals.wav') }}"></audio>
+    <audio controls src="{{ url_for('serve_separated_file', filename=folder + '/drums.wav') }}"></audio>
+    <audio controls src="{{ url_for('serve_separated_file', filename=folder + '/bass.wav') }}"></audio>
+    <audio controls src="{{ url_for('serve_separated_file', filename=folder + '/other.wav') }}"></audio>
+
+
+</body>
+</html>
