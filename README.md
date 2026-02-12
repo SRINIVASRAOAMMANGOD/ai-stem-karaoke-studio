@@ -33,4 +33,55 @@ It allows users to:
 ---
 
 ## 🏗️ System Architecture
+User
+↓
+Web Interface (Frontend)
+↓
+Flask Backend
+↓
+Demucs AI Model
+↓
+Separated Audio Stems
+↓
+Karaoke & Stem Mixer
+
+---
+
+## 🛠️ Tech Stack
+
+- **Backend:** Flask (Python)
+- **AI Model:** Demucs (Deep Learning)
+- **Frontend:** HTML, CSS, JavaScript
+- **Database:** SQLite (Optional)
+- **Audio Processing:** FFmpeg
+- **URL Processing:** yt-dlp
+
+---
+
+## 📂 Project Structure
+ai-stem-karaoke-studio/
+│
+├── app.py
+├── services/
+├── database/
+├── templates/
+├── static/
+├── uploads/
+└── separated/
+
+---
+
+## ⚙️ Installation & Setup
+
+### 1️⃣ Clone Repository
+
+```bash
+git clone <your-repo-url>
+cd ai-stem-karaoke-studio
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python app.py
+http://127.0.0.1:5000
+
 
