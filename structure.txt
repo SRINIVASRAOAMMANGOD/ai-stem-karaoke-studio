@@ -1,5 +1,5 @@
 ﻿AI STEM Karaoke Studio — Project Structure
-Last updated: 2026-03-01
+Last updated: 2026-03-01 (rev 2)
 ==========================================
 
 ai-stem-karaoke-studio/
@@ -19,7 +19,12 @@ ai-stem-karaoke-studio/
 ├── services/                     # Business logic services
 │   ├── __init__.py
 │   ├── demucs_service.py         # Demucs stem separation (model cache, GPU detection, WAV export)
-│   └── url_service.py            # YouTube / direct-URL audio download via yt-dlp / requests
+│   ├── url_service.py            # YouTube / direct-URL audio download — returns (path, title) tuple
+│   │                             #   Fixed base filename 'yt_audio' (no title in path)
+│   │                             #   postprocessor_hooks + progress_hooks capture real output path
+│   │                             #   3-strategy fallback: hook → expected path → folder scan
+│   └── scoring_service.py        # Vocal performance scoring via librosa + mir_eval
+│                                 #   6 metrics: pitch, timing, tone, expression, consistency, breath
 │
 ├── static/
 │   ├── css/
@@ -54,12 +59,15 @@ ai-stem-karaoke-studio/
 │
 ├── projects/                     # All user projects (one folder per session)
 │   └── YYYYMMDD_HHMMSS/          # Project folder named by creation timestamp
-│       ├── metadata.json         # Project state: id, name, model, stems_folder, has_recording, score, mix_settings
-│       ├── original_<filename>   # Original uploaded audio file
+│       ├── metadata.json         # Project state: id, name, model, stems_folder, has_recording,
+│       │                         #   score, mix_settings, source_url (URL projects only)
+│       ├── original_<filename>   # Original uploaded audio file  (file-upload projects)
 │       ├── recording.webm        # User's recorded vocal take (saved after karaoke session)
+│       ├── downloads/            # URL-download projects only
+│       │   └── yt_audio.mp3      # Fixed filename — no YouTube title in path (avoids special chars)
 │       └── stems/
-│           └── htdemucs/
-│               └── <track_name>/
+│           └── <model>/          # e.g. htdemucs, htdemucs_ft, htdemucs_6s, mdx_extra
+│               └── <track_name>/ # Derived from audio filename (yt_audio for URL downloads)
 │                   ├── vocals.wav
 │                   ├── drums.wav
 │                   ├── bass.wav
@@ -96,13 +104,16 @@ app.py — Routes map
 
   API ROUTES
     POST /upload                        → save file → run Demucs → create project → return redirect URL
+    POST /upload-url                    → download from YouTube/URL → run Demucs → return redirect URL
+                                          body: {url, model}  response: {success, redirect_url}
     GET  /api/stems/<project_id>        → return {stem_name: file_url} dict for mixer/karaoke
-    GET  /api/projects                  → list all projects (sorted newest-first)
+    GET  /api/project-requirements/<id> → {has_vocals, has_recording, vocal_url, recording_url}
+    GET  /api/projects                  → list all projects with stems dict injected (sorted newest-first)
     GET  /api/projects/<id>             → get single project metadata
     DEL  /api/projects/<id>             → delete project folder entirely
     POST /api/projects/<id>/save-mix    → persist mixer volumes/mute/solo/tempo/pitch to metadata
     POST /api/save-recording/<id>       → save microphone recording blob, set has_recording=true
-    POST /api/analyze-performance/<id>  → return mock AI score (stub; real AI TBD)
+    POST /api/analyze-performance/<id>  → real librosa+mir_eval scoring; returns 6 metrics + overall
     GET  /api/settings                  → return merged settings (defaults + settings.json)
     POST /api/settings                  → persist settings to settings.json
     GET  /api/storage-info              → disk usage stats for projects/ folder
@@ -120,8 +131,18 @@ services/demucs_service.py
   Supports: htdemucs, htdemucs_ft, htdemucs_6s, mdx_extra, mdx_extra_q
 
 services/url_service.py
-  download_from_url(url, output_folder) → file_path
-  Handles YouTube (via yt-dlp + FFmpeg) and direct audio URLs
+  download_from_url(url, output_folder) → (file_path, title)  ← tuple, NOT bare string
+  download_from_youtube()  uses fixed 'yt_audio' base name in outtmpl; captures real
+    output path via postprocessor_hooks + progress_hooks; 3-strategy fallback resolution
+  download_direct_audio()  direct HTTP download via requests
+  is_youtube_url(), get_video_info()  helpers
+
+services/scoring_service.py
+  analyze_vocal_accuracy(vocal_path, recording_path) → dict
+  Metrics (0-100): pitch_accuracy (pyin+mir_eval RPA), timing_accuracy (onset F-measure),
+    tone_quality (MFCC cosine sim), expression (RMS Pearson), consistency (chroma accuracy),
+    breath_control (pause-ratio similarity)
+  Falls back to _fallback_analysis() if librosa/mir_eval not installed
 
 settings.json (runtime, auto-created)
   Keys: audio_output, audio_input, sample_rate, buffer_size, normalize_audio,

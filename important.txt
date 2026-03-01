@@ -1,6 +1,7 @@
 AI STEM KARAOKE STUDIO
 LOCAL DEVELOPMENT SETUP GUIDE
 ================================
+Last updated: 2026-03-01 (rev 2)
 
 IMPORTANT:
 This project requires Python 3.11 and FFmpeg installed on the system.
@@ -21,7 +22,10 @@ py -3.11 --version
 ------------------------------------------------
 2. INSTALL FFMPEG (REQUIRED)
 ------------------------------------------------
-Demucs cannot decode MP3 files without FFmpeg.
+Required for TWO reasons:
+  a) Demucs / torchaudio cannot decode MP3 files without it
+  b) yt-dlp uses FFmpegExtractAudio postprocessor to convert
+     downloaded YouTube audio to MP3
 
 Download from:
 https://github.com/BtbN/FFmpeg-Builds/releases
@@ -73,6 +77,17 @@ Python 3.11.x
 pip install --upgrade pip
 pip install -r requirements.txt
 
+Key packages installed:
+  Flask 3.1.2              Web framework
+  demucs 4.0.1             Stem separation AI
+  torch / torchaudio       Deep learning runtime
+  yt-dlp 2026.2.4          YouTube + URL audio download
+  requests 2.32.5          Direct audio URL download
+  librosa 0.11.0           Vocal performance feature extraction
+  mir_eval >=0.7           MIR evaluation metrics (pitch accuracy, onset F-measure)
+  scipy >=1.13.0           librosa dependency
+  werkzeug 3.1.5           Flask dependency (secure_filename etc.)
+
 ------------------------------------------------
 6. RUN APPLICATION
 ------------------------------------------------
@@ -81,22 +96,115 @@ python app.py
 Open:
 http://127.0.0.1:5000
 
+The server pre-warms the default Demucs model in a background
+thread on startup — the first upload will not stall for model load.
+
 ------------------------------------------------
 IMPORTANT RULES
 ------------------------------------------------
 • Always activate venv before running project.
 • Never run project using global Python.
-• Do not commit uploads/ or separated/ folders.
+• Do not commit uploads/, separated/, or projects/ folders.
 • If errors occur, delete venv and recreate it.
 • If audio fails to load, check FFmpeg installation.
+• settings.json is auto-created on first Settings save — do not commit it.
+
+------------------------------------------------
+RECENT FIXES & CHANGES (2026-03-01)
+------------------------------------------------
+
+[FIX] YouTube waveform / stems not showing after URL download
+  Root cause: url_service.py used %(title)s in yt-dlp outtmpl.
+    YouTube titles with special characters ([, ], :, |, unicode) are
+    sanitized differently inside yt-dlp vs the Windows filesystem.
+    prepare_filename(info) returned a path that didn't match the actual
+    file on disk → os.path.exists() returned False → returned None →
+    Demucs never ran → no stems → mixer showed nothing.
+  Fix: outtmpl now uses a fixed safe filename: 'yt_audio.%(ext)s'
+    Real output path is captured via postprocessor_hooks + progress_hooks.
+    Three-strategy fallback: hook result → expected .mp3 → folder scan.
+    YouTube video title is captured from info_dict and returned as a
+    separate value so the project gets a meaningful name without putting
+    the title in any file system path.
+  Result: download_from_url() now returns a TUPLE (file_path, title).
+    app.py unpacks: audio_path, video_title = download_from_url(...)
+
+[FIX] Uploaded file always saved with model='htdemucs' regardless of selection
+  Root cause: POST /upload hardcoded 'model': 'htdemucs' in project_data.
+  Fix: Changed to use saved_model variable (which reads from form data
+    or falls back to settings default).
+
+[FIX] Model selector not visible when YouTube URL tab was active
+  Root cause: <select id="model-select"> was inside the file-tab div,
+    so it was hidden when the URL tab was selected.
+  Fix: Moved model-select outside both tab-content divs so it is always
+    visible regardless of which upload method is chosen.
+
+[FIX] Stem badges never appeared on Projects page
+  Root cause: template checked project.stems (a dict) but metadata.json
+    only stores stems_folder (a string path). get_all_projects() never
+    built the stems dict so the template always skipped badges.
+  Fix: get_all_projects() now scans stems_folder after loading each
+    project and injects a stems dict: {stem_name: True, ...}
+
+[FEATURE] Real AI performance scoring (replace stub)
+  services/scoring_service.py now performs actual analysis via:
+    librosa.pyin → pitch contours
+    mir_eval.melody.raw_pitch_accuracy → pitch score
+    librosa.onset.onset_detect → onset times
+    mir_eval.onset.f_measure → timing score
+    librosa.feature.mfcc + cosine similarity → tone quality
+    librosa.feature.rms + Pearson correlation → expression
+    mir_eval.melody.raw_chroma_accuracy → consistency
+    silence-ratio difference → breath control
+  Falls back to _fallback_analysis() with estimated scores if
+  librosa/mir_eval are not installed.
+
+[FEATURE] Full URL upload workflow (POST /upload-url)
+  New Flask route accepts JSON { url, model }.
+  Calls url_service.download_from_url() → runs Demucs → saves metadata
+  with source_url field → returns redirect_url for the mixer page.
+  JS handleUrlUpload() supports 10-minute timeout and shows progress.
+
+[FEATURE] Full karaoke recording pipeline
+  Web Audio API pipeline: mic → gain → analyser → reverb → echo → dest.
+  MediaRecorder records the processed stream.
+  Count-in (4 beats) overlay with animation before recording starts.
+  Multiple takes supported; any take can be selected as the final take.
+  Lyrics editor with per-line highlight synced to backing track position.
+  Vocal effects: reverb (convolver), echo (delay + feedback), autotune display.
+  Three presets: Classic, Concert, Studio.
+
+[FEATURE] Full stem mixer
+  WaveSurfer.js v7 main waveform drives playback clock.
+  Per-stem mini WaveSurfer waveforms (visual only, muted).
+  Solo/mute/volume per stem with correct priority logic.
+  VU meter animation during playback.
+  Tempo control via Audio.playbackRate.
+  Pitch display (label-only; real pitch shift requires DAW/AudioWorklet).
+  Export mix: OfflineAudioContext renders all active stems to WAV.
+  Save project: persists mix_settings to metadata.json via API.
+
+[FEATURE] Compare page
+  Side-by-side WaveSurfer waveforms for original vocals vs recording.
+  Spectrograms rendered via manual DFT on canvas.
+  Playback modes: Original / Recording / Both / A/B switch (4 s interval).
+  Sync button aligns recording position to original.
+  Analysis results populate both the score dashboard ring and the
+  comparison stat bars simultaneously.
+  Download HTML report and Share (Web Share API / clipboard fallback).
 
 ------------------------------------------------
 WHY FFMPEG IS REQUIRED
 ------------------------------------------------
 Demucs uses torchaudio.
 Torchaudio depends on FFmpeg to decode MP3/WAV files.
-Without FFmpeg installed system-wide,
-audio decoding will fail.
+Without FFmpeg installed system-wide, audio decoding will fail.
+
+yt-dlp uses FFmpegExtractAudio postprocessor to convert the downloaded
+YouTube container (webm/opus) to MP3. Without FFmpeg in PATH, yt-dlp
+will download the raw container file and the MP3 conversion step will
+silently fail, leaving no usable audio file for Demucs.
 
 ------------------------------------------------
 SYSTEM REQUIREMENTS
@@ -104,5 +212,38 @@ SYSTEM REQUIREMENTS
 Minimum:
 - Windows 10/11
 - Python 3.11
-- 8GB RAM recommended
-- FFmpeg installed
+- 8 GB RAM (16 GB recommended for longer audio files)
+- FFmpeg in system PATH
+
+Optional (significant speedup):
+- NVIDIA GPU with CUDA 12.x
+  Install CUDA torch wheel:
+  pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+------------------------------------------------
+TROUBLESHOOTING
+------------------------------------------------
+Problem: Waveform not showing after YouTube URL upload
+  → Verify FFmpeg is in PATH: ffmpeg -version
+  → Check Flask logs for "[url_service] YouTube download produced no audio file."
+  → If file downloads but Demucs fails, check torch/torchaudio versions.
+
+Problem: "No stems found" on mixer page
+  → Check projects/<id>/stems/ folder exists and contains .wav files.
+  → Check metadata.json has correct stems_folder path.
+  → Re-upload the audio if stems folder is missing.
+
+Problem: Microphone not appearing in Karaoke page
+  → Allow microphone permission in browser when prompted.
+  → Click the Refresh icon next to the mic selector.
+  → Check browser console for getUserMedia errors.
+
+Problem: Performance analysis fails
+  → Ensure librosa and mir_eval are installed: pip install librosa mir_eval
+  → Ensure a recording was saved first (Save button on Karaoke page).
+  → Check Flask logs for Python traceback from scoring_service.py.
+
+Problem: First upload is slow (1-2 min extra)
+  → Demucs model is loaded from disk on first use.
+  → Subsequent uploads reuse the cached model (instant).
+  → Pre-warming happens automatically on server start.
