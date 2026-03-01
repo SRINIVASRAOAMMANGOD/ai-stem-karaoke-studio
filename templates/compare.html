@@ -1,100 +1,616 @@
-{% extends 'base.html' %}
-
+﻿{% extends "base.html" %}
 {% block title %}Compare - {{ project.name }}{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="page-header">
-        <h2><i class="fas fa-compress-arrows-alt"></i> Comparison & Analysis - {{ project.name }}</h2>
-        <div class="actions">
-            <button class="btn btn-primary" id="analyze-btn">
-                <i class="fas fa-robot"></i> Analyze Performance
+<div class="compare-page">
+
+    <!-- Page header -->
+    <div class="compare-header">
+        <div class="compare-header__left">
+            <h2><i class="fas fa-compress-arrows-alt"></i> {{ project.name }}</h2>
+            <p class="compare-header__sub">Vocal Comparison &amp; Performance Analysis</p>
+        </div>
+        <div class="compare-header__right">
+            <button class="sda-btn sda-btn--primary" id="analyze-btn"
+                {% if not has_vocals or not has_recording %}disabled{% endif %}>
+                <i class="fas fa-chart-bar"></i><span>Analyze Performance</span>
             </button>
-            <a href="{{ url_for('karaoke', project_id=project.id) }}" class="btn btn-secondary">
-                <i class="fas fa-microphone"></i> Record Again
+            <a href="{{ url_for('karaoke', project_id=project.id) }}" class="sda-btn sda-btn--ghost">
+                <i class="fas fa-microphone"></i><span>Record Again</span>
             </a>
         </div>
     </div>
 
-    <!-- Comparison Layout -->
-    {% include 'components/comparison_layout.html' %}
-    
-    <!-- AI Score Dashboard -->
-    {% include 'components/ai_score_dashboard.html' %}
+    <!-- Requirements banner -->
+    {% if not has_vocals or not has_recording %}
+    <div class="req-banner">
+        <i class="fas fa-exclamation-triangle req-banner__icon"></i>
+        <div class="req-banner__body">
+            <strong>Requirements not met</strong>
+            <ul class="req-list">
+                {% if not has_vocals %}
+                <li class="req-list__item req-list__item--bad">
+                    <i class="fas fa-times-circle"></i>
+                    Isolated vocal stem missing —
+                    <a href="{{ url_for('index') }}">re-process audio</a>
+                </li>
+                {% else %}
+                <li class="req-list__item req-list__item--ok">
+                    <i class="fas fa-check-circle"></i> Vocal stem ready
+                </li>
+                {% endif %}
+                {% if not has_recording %}
+                <li class="req-list__item req-list__item--bad">
+                    <i class="fas fa-times-circle"></i>
+                    No recording found —
+                    <a href="{{ url_for('karaoke', project_id=project.id) }}">record first</a>
+                </li>
+                {% else %}
+                <li class="req-list__item req-list__item--ok">
+                    <i class="fas fa-check-circle"></i> Recording ready
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Two-column layout on desktop, stacked on mobile -->
+    <div class="compare-body">
+
+        <!-- Left / top: waveform comparison -->
+        <div class="compare-body__wave">
+            {% if has_vocals %}
+                {% include "components/comparison_layout.html" %}
+            {% endif %}
+        </div>
+
+        <!-- Right / bottom: score dashboard -->
+        <div class="compare-body__score">
+            {% include "components/ai_score_dashboard.html" %}
+        </div>
+
+    </div>
 </div>
+
+<!-- Inline error toast (injected by JS) -->
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
 <script>
-    const projectId = '{{ project.id }}';
-    
-    document.addEventListener('DOMContentLoaded', function() {
-        initComparison();
-        
-        document.getElementById('analyze-btn').addEventListener('click', analyzePerformance);
-    });
-    
-    function initComparison() {
-        console.log('Comparison initialized for project:', projectId);
-        // TODO: Load waveforms for comparison
-    }
-    
-    async function analyzePerformance() {
-        try {
-            document.getElementById('analyze-btn').disabled = true;
-            document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
-            
-            const response = await fetch(`/api/analyze-performance/${projectId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+/* =========================================================
+   Compare page — main script
+   ========================================================= */
+const projectId    = '{{ project.id }}';
+const hasVocals    = {{ 'true' if has_vocals    else 'false' }};
+const hasRecording = {{ 'true' if has_recording else 'false' }};
+
+let wsOriginal = null, wsRecording = null;
+let playMode   = 'original';
+let switchInterval = null;
+let lastAnalysis = null;
+
+/* ── Boot ─────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', async () => {
+    if (hasVocals && hasRecording) await initComparison();
+
+    // Wire ALL analyze buttons (header + dashboard)
+    document.querySelectorAll('#analyze-btn, #analyze-performance-btn')
+        .forEach(btn => btn.addEventListener('click', analyzePerformance));
+
+    document.getElementById('share-score-btn')
+        .addEventListener('click', shareScore);
+    document.getElementById('download-report-btn')
+        .addEventListener('click', downloadReport);
+});
+
+/* ── Comparison init ──────────────────────────────────────── */
+async function initComparison() {
+    try {
+        const res  = await fetch(`/api/project-requirements/${projectId}`);
+        const data = await res.json();
+        if (!data.success) return;
+        const { vocal_url, recording_url } = data;
+
+        document.getElementById('comparison-section').style.display = 'block';
+
+        wsOriginal = WaveSurfer.create({
+            container: '#comparison-wave-original',
+            waveColor: '#6366f1', progressColor: '#818cf8',
+            height: 72, barWidth: 2, barGap: 1, normalize: true,
+        });
+        wsOriginal.load(vocal_url);
+
+        wsRecording = WaveSurfer.create({
+            container: '#comparison-wave-recording',
+            waveColor: '#10b981', progressColor: '#34d399',
+            height: 72, barWidth: 2, barGap: 1, normalize: true,
+        });
+        wsRecording.load(recording_url);
+
+        let readyCount = 0;
+        const onReady = () => {
+            if (++readyCount < 2) return;
+            document.getElementById('comparison-content').style.display = 'block';
+            renderSpectrogram('spectrogram-original',  vocal_url);
+            renderSpectrogram('spectrogram-recording', recording_url);
+        };
+        wsOriginal.on('ready',  onReady);
+        wsRecording.on('ready', onReady);
+        wsOriginal.on('finish',  () => wsRecording.stop());
+
+        document.querySelector('.play-original')
+            .addEventListener('click', () => { wsRecording.stop(); wsOriginal.playPause(); });
+        document.querySelector('.play-recording')
+            .addEventListener('click', () => { wsOriginal.stop(); wsRecording.playPause(); });
+
+        document.querySelectorAll('.cmp-mode').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.cmp-mode').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                playMode = btn.dataset.mode;
+                stopAll();
             });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                displayAnalysis(data.analysis);
-                document.getElementById('ai-score-section').style.display = 'block';
-                document.getElementById('ai-score-section').scrollIntoView({ behavior: 'smooth' });
-            } else {
-                alert('Analysis failed: ' + data.error);
+        });
+
+        document.getElementById('comp-play-btn') .addEventListener('click', playByMode);
+        document.getElementById('comp-pause-btn').addEventListener('click', () => { wsOriginal.pause(); wsRecording.pause(); });
+        document.getElementById('comp-stop-btn') .addEventListener('click', stopAll);
+        document.getElementById('comp-sync-btn') .addEventListener('click', syncPlayback);
+        document.getElementById('export-comparison-btn').addEventListener('click', exportReport);
+
+    } catch (err) {
+        console.error('Comparison init failed:', err);
+    }
+}
+
+/* ── Spectrogram ──────────────────────────────────────────── */
+async function renderSpectrogram(canvasId, audioUrl) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width  = canvas.offsetWidth || 400;
+    canvas.height = 110;
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#475569'; ctx.font = '11px sans-serif';
+    ctx.fillText('Loading…', 10, canvas.height / 2 + 4);
+    try {
+        const buf     = await (await fetch(audioUrl)).arrayBuffer();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const decoded  = await audioCtx.decodeAudioData(buf);
+        audioCtx.close();
+        const samples = decoded.getChannelData(0);
+        const N = 64, COLS = 300, STEP = Math.floor(samples.length / COLS);
+        canvas.width  = canvas.offsetWidth || 400;
+        const colW = canvas.width / COLS, rowH = canvas.height / (N / 2);
+        const hann = Float32Array.from({length: N}, (_, i) => 0.5 * (1 - Math.cos(2 * Math.PI * i / (N - 1))));
+        for (let col = 0; col < COLS; col++) {
+            const start = col * STEP;
+            for (let bin = 0; bin < N / 2; bin++) {
+                let re = 0, im = 0;
+                for (let n = 0; n < N; n++) {
+                    const s = (samples[start + n] || 0) * hann[n];
+                    const a = -2 * Math.PI * bin * n / N;
+                    re += s * Math.cos(a); im += s * Math.sin(a);
+                }
+                const mag = Math.sqrt(re*re + im*im) / N;
+                const db  = Math.max(0, Math.min(1, 1 + Math.log10(mag + 1e-6) / 3));
+                ctx.fillStyle = `hsl(${240 - db*200},90%,${10 + db*60}%)`;
+                ctx.fillRect(col * colW, canvas.height - (bin + 1) * rowH,
+                             Math.max(1, colW), Math.max(1, rowH));
             }
-        } catch (error) {
-            console.error('Analysis error:', error);
-            alert('Failed to analyze performance');
-        } finally {
-            document.getElementById('analyze-btn').disabled = false;
-            document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-robot"></i> Analyze Performance';
         }
+    } catch (e) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ef4444'; ctx.font = '11px sans-serif';
+        ctx.fillText('Spectrogram unavailable', 8, canvas.height / 2);
     }
-    
-    function displayAnalysis(analysis) {
-        // Update overall score
-        document.getElementById('overall-score').textContent = analysis.overall_score;
-        document.getElementById('score-rating').textContent = getRating(analysis.overall_score);
-        
-        // Update metrics
-        updateMetric('pitch', analysis.pitch_accuracy);
-        updateMetric('timing', analysis.timing_accuracy);
-        updateMetric('volume', analysis.volume_stability);
-        
-        // Update feedback
-        document.getElementById('ai-insights-content').innerHTML = `<p>${analysis.feedback}</p>`;
+}
+
+/* ── Transport ────────────────────────────────────────────── */
+function stopAll() {
+    wsOriginal  && wsOriginal.stop();
+    wsRecording && wsRecording.stop();
+    clearInterval(switchInterval);
+}
+function syncPlayback() {
+    if (!wsOriginal || !wsRecording) return;
+    const t = wsOriginal.getCurrentTime();
+    wsRecording.seekTo(t / Math.max(wsRecording.getDuration(), 1));
+}
+function playByMode() {
+    if (!wsOriginal || !wsRecording) return;
+    clearInterval(switchInterval); stopAll();
+    if (playMode === 'original')        wsOriginal.play();
+    else if (playMode === 'recording')  wsRecording.play();
+    else if (playMode === 'both')       { wsOriginal.play(); wsRecording.play(); }
+    else if (playMode === 'switch') {
+        let cur = 'original'; wsOriginal.play();
+        switchInterval = setInterval(() => {
+            if (cur === 'original') { wsOriginal.pause(); wsRecording.play(); cur = 'recording'; }
+            else                   { wsRecording.pause(); wsOriginal.play();  cur = 'original'; }
+        }, 4000);
     }
-    
-    function updateMetric(name, value) {
-        document.getElementById(`${name}-score`).textContent = value;
-        document.getElementById(`${name}-fill`).style.width = value + '%';
+}
+
+/* ── Analyze ──────────────────────────────────────────────── */
+async function analyzePerformance() {
+    if (!hasVocals)    { toast('Vocal stem missing — re-process the audio.', 'error'); return; }
+    if (!hasRecording) { toast('No recording found — record on the Karaoke page first.', 'error'); return; }
+
+    const btns = document.querySelectorAll('#analyze-btn, #analyze-performance-btn');
+    btns.forEach(b => { b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing…'; });
+
+    try {
+        const res  = await fetch(`/api/analyze-performance/${projectId}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+            displayAnalysis(data.analysis);
+            document.getElementById('score-empty-state').style.display = 'none';
+            document.getElementById('score-results').style.display     = 'block';
+            document.getElementById('ai-score-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            toast(data.error || 'Analysis failed — check server logs.', 'error');
+        }
+    } catch (err) {
+        toast('Could not reach server. Is Flask running?', 'error');
+    } finally {
+        btns.forEach(b => {
+            b.disabled = !(hasVocals && hasRecording);
+            b.innerHTML = '<i class="fas fa-chart-bar"></i><span>Analyze Performance</span>';
+        });
     }
-    
-    function getRating(score) {
-        if (score >= 90) return 'Excellent!';
-        if (score >= 80) return 'Great!';
-        if (score >= 70) return 'Good';
-        if (score >= 60) return 'Fair';
-        return 'Needs Improvement';
+}
+
+/* ── Display results ──────────────────────────────────────── */
+function displayAnalysis(a) {
+    lastAnalysis = a;
+    animateNum('overall-score', a.overall_score);
+    document.getElementById('score-rating').textContent = getRating(a.overall_score);
+    setRingCircle(a.overall_score);
+
+    setMetric('pitch',       a.pitch_accuracy,  a.pitch_feedback);
+    setMetric('timing',      a.timing_accuracy, a.timing_feedback);
+    setMetric('tone',        a.tone_quality,    a.tone_feedback);
+    setMetric('expression',  a.expression,      a.expression_feedback);
+    setMetric('consistency', a.consistency,     a.consistency_feedback);
+    setMetric('breath',      a.breath_control,  a.breath_feedback);
+
+    // Comparison section bars
+    setStatBar('pitch-accuracy',  'pitch-stat-value',  a.pitch_accuracy);
+    setStatBar('timing-accuracy', 'timing-stat-value', a.timing_accuracy);
+    setStatBar('tone-accuracy',   'tone-stat-value',   a.tone_quality);
+    setStatBar('breath-accuracy', 'breath-stat-value', a.breath_control);
+}
+
+function setStatBar(barId, valId, score) {
+    const bar = document.getElementById(barId);
+    const val = document.getElementById(valId);
+    if (bar) { bar.style.width = score + '%'; bar.style.background = scoreColor(score); }
+    if (val) val.textContent = score + '%';
+}
+function setMetric(name, value, fb) {
+    animateNum(`${name}-score`, value);
+    const fill = document.getElementById(`${name}-fill`);
+    if (fill) { fill.style.width = value + '%'; fill.style.background = scoreColor(value); }
+    const fEl = document.getElementById(`${name}-feedback`);
+    if (fEl) fEl.textContent = fb || '';
+}
+function scoreColor(v) {
+    return v >= 75 ? '#10b981' : v >= 55 ? '#f59e0b' : '#ef4444';
+}
+function animateNum(id, target) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let cur = 0, step = Math.ceil(target / 40);
+    const t = setInterval(() => {
+        cur = Math.min(cur + step, target);
+        el.textContent = cur;
+        if (cur >= target) clearInterval(t);
+    }, 25);
+}
+function setRingCircle(score) {
+    const c = document.getElementById('score-circle');
+    if (!c) return;
+    const r = 52, circ = 2 * Math.PI * r;
+    c.style.strokeDasharray  = circ;
+    c.style.strokeDashoffset = circ * (1 - score / 100);
+    c.style.stroke = scoreColor(score);
+    c.style.transition = 'stroke-dashoffset 1.2s ease, stroke 0.5s';
+}
+function getRating(s) {
+    if (s >= 90) return 'Excellent!';
+    if (s >= 80) return 'Great!';
+    if (s >= 70) return 'Good';
+    if (s >= 60) return 'Fair';
+    return 'Needs Work';
+}
+
+/* ── Share ────────────────────────────────────────────────── */
+async function shareScore() {
+    if (!lastAnalysis) { toast('Run Analyze first.', 'warning'); return; }
+    const a = lastAnalysis;
+    const text = [
+        `Karaoke Score — {{ project.name }}`,
+        `Overall: ${a.overall_score}/100 (${getRating(a.overall_score)})`,
+        `Pitch: ${a.pitch_accuracy}  Timing: ${a.timing_accuracy}  Tone: ${a.tone_quality}`,
+        `Expression: ${a.expression}  Consistency: ${a.consistency}  Breath: ${a.breath_control}`,
+    ].join('\n');
+    if (navigator.share) {
+        try { await navigator.share({ title: 'My Karaoke Score', text }); return; } catch {}
     }
+    try {
+        await navigator.clipboard.writeText(text);
+        toast('Score copied to clipboard!', 'success');
+    } catch { toast('Could not copy — screenshot instead.', 'error'); }
+}
+
+/* ── Download report ──────────────────────────────────────── */
+function downloadReport() {
+    if (!lastAnalysis) { toast('Run Analyze first.', 'warning'); return; }
+    const a = lastAnalysis, name = '{{ project.name }}', date = new Date().toLocaleString();
+    const col = s => s >= 75 ? '#10b981' : s >= 55 ? '#f59e0b' : '#ef4444';
+    const row = (lbl, s, fb) => `
+        <tr>
+            <td>${lbl}</td>
+            <td><div style="background:#334155;border-radius:4px;height:10px;overflow:hidden">
+                <div style="width:${s}%;height:100%;background:${col(s)};border-radius:4px"></div>
+            </div></td>
+            <td style="color:${col(s)};font-weight:700">${s}</td>
+            <td style="color:#94a3b8;font-size:12px">${fb || ''}</td>
+        </tr>`;
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Karaoke Report — ${name}</title>
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#f1f5f9;margin:0;padding:32px}
+h1{color:#6366f1;font-size:1.5rem;margin:0 0 4px}.sub{color:#64748b;font-size:.85rem;margin-bottom:28px}
+.card{background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px}
+.overall{display:flex;align-items:center;gap:20px}.big{font-size:5rem;font-weight:800;color:${col(a.overall_score)};line-height:1}
+.rating{font-size:1.3rem;font-weight:700}table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:8px 12px;color:#64748b;font-size:11px;text-transform:uppercase;border-bottom:1px solid #334155}
+td{padding:8px 12px;border-bottom:1px solid #1e293b}
+footer{color:#334155;font-size:12px;text-align:center;margin-top:28px}
+</style></head><body>
+<h1>Karaoke Performance Report</h1>
+<div class="sub">Project: <strong>${name}</strong> &nbsp;|&nbsp; ${date}</div>
+<div class="card"><div class="overall">
+    <div><div class="big">${a.overall_score}</div><div style="color:#94a3b8;font-size:.85rem">/ 100</div></div>
+    <div><div class="rating">${getRating(a.overall_score)}</div></div>
+</div></div>
+<div class="card"><table>
+<thead><tr><th>Metric</th><th style="min-width:140px">Score</th><th>Pts</th><th>Feedback</th></tr></thead>
+<tbody>
+${row('Pitch Accuracy',  a.pitch_accuracy,  a.pitch_feedback)}
+${row('Timing',         a.timing_accuracy, a.timing_feedback)}
+${row('Tone Quality',   a.tone_quality,    a.tone_feedback)}
+${row('Expression',     a.expression,      a.expression_feedback)}
+${row('Consistency',    a.consistency,     a.consistency_feedback)}
+${row('Breath Control', a.breath_control,  a.breath_feedback)}
+</tbody></table></div>
+<footer>STEM Karaoke Studio &mdash; ${date}</footer>
+</body></html>`;
+    const url = URL.createObjectURL(new Blob([html], {type:'text/html'}));
+    Object.assign(document.createElement('a'), {href:url, download:`karaoke-report-${projectId}.html`}).click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('Report downloaded!', 'success');
+}
+
+/* ── Export comparison report ─────────────────────────────── */
+function exportReport() {
+    const name = '{{ project.name }}', date = new Date().toLocaleString();
+    const col  = s => s >= 75 ? '#10b981' : s >= 55 ? '#f59e0b' : '#ef4444';
+    const scoreHtml = lastAnalysis ? (() => {
+        const a = lastAnalysis;
+        const row = (lbl, s) => `<tr>
+            <td>${lbl}</td>
+            <td><div style="background:#334155;border-radius:4px;height:8px;overflow:hidden">
+                <div style="width:${s}%;height:100%;background:${col(s)};border-radius:4px"></div>
+            </div></td>
+            <td style="color:${col(s)};font-weight:700">${s}</td></tr>`;
+        return `<div class="card"><div class="big" style="color:${col(a.overall_score)}">${a.overall_score}<span style="font-size:1rem;color:#64748b">/100</span></div>
+<table><thead><tr><th>Metric</th><th>Score</th><th>Pts</th></tr></thead><tbody>
+${row('Pitch',a.pitch_accuracy)}${row('Timing',a.timing_accuracy)}${row('Tone',a.tone_quality)}
+${row('Expression',a.expression)}${row('Consistency',a.consistency)}${row('Breath',a.breath_control)}
+</tbody></table></div>`;
+    })() : '<div class="card" style="color:#64748b">Run Analyze Performance first for score data.</div>';
+
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Comparison Report — ${name}</title>
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#f1f5f9;margin:0;padding:32px}
+h1{color:#6366f1;font-size:1.5rem;margin:0 0 4px}.sub{color:#64748b;font-size:.85rem;margin-bottom:28px}
+.card{background:#1e293b;border-radius:12px;padding:20px;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.info-item{background:#0f172a;border-radius:8px;padding:12px 16px}
+.info-label{font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:4px}
+.info-value{font-weight:600}.big{font-size:3.5rem;font-weight:800;margin-bottom:8px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:8px 12px;color:#64748b;font-size:11px;text-transform:uppercase;border-bottom:1px solid #334155}
+td{padding:8px 12px;border-bottom:1px solid #1e293b;font-size:.9rem}
+footer{color:#334155;font-size:12px;text-align:center;margin-top:28px}
+</style></head><body>
+<h1>Vocal Comparison Report</h1>
+<div class="sub">Project: <strong>${name}</strong> &nbsp;|&nbsp; ${date}</div>
+<div class="card"><div class="grid">
+    <div class="info-item"><div class="info-label">Project</div><div class="info-value">${name}</div></div>
+    <div class="info-item"><div class="info-label">Generated</div><div class="info-value">${date}</div></div>
+    <div class="info-item"><div class="info-label">Reference</div><div class="info-value">Original Vocal Stem</div></div>
+    <div class="info-item"><div class="info-label">Comparison</div><div class="info-value">Your Recording</div></div>
+</div></div>
+${scoreHtml}
+<footer>STEM Karaoke Studio &mdash; Comparison Report &mdash; ${date}</footer>
+</body></html>`;
+    const url = URL.createObjectURL(new Blob([html], {type:'text/html'}));
+    Object.assign(document.createElement('a'), {href:url, download:`comparison-report-${projectId}.html`}).click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('Comparison report downloaded!', 'success');
+}
+
+/* ── Toast ────────────────────────────────────────────────── */
+function toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `app-toast app-toast--${type}`;
+    el.innerHTML = `<span>${msg}</span>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('app-toast--show'));
+    setTimeout(() => {
+        el.classList.remove('app-toast--show');
+        setTimeout(() => el.remove(), 350);
+    }, 3200);
+}
 </script>
+
+<style>
+/* ── Compare page layout ───────────────────────────────────── */
+.compare-page { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+
+.compare-header {
+    display: flex; flex-wrap: wrap; align-items: flex-start;
+    justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem;
+}
+.compare-header__left h2 { margin: 0; font-size: 1.3rem; color: var(--text-primary, #f1f5f9); }
+.compare-header__sub { margin: 0.2rem 0 0; color: var(--text-muted, #64748b); font-size: .85rem; }
+.compare-header__right { display: flex; gap: .6rem; flex-wrap: wrap; }
+
+/* -- Requirements banner -- */
+.req-banner {
+    display: flex; gap: 1rem; align-items: flex-start;
+    background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.3);
+    border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+}
+.req-banner__icon { color: #ef4444; font-size: 1.2rem; margin-top: .15rem; flex-shrink: 0; }
+.req-banner__body strong { color: #f1f5f9; display: block; margin-bottom: .5rem; }
+.req-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .4rem; }
+.req-list__item { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
+.req-list__item--bad { color: #f1f5f9; }
+.req-list__item--bad i { color: #ef4444; }
+.req-list__item--ok  { color: #10b981; }
+.req-list__item a { color: #818cf8; text-decoration: underline; }
+
+/* -- Body grid: side-by-side on large screens -- */
+.compare-body { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+@media (min-width: 1024px) { .compare-body { grid-template-columns: 1fr 1fr; } }
+
+/* ── Action buttons ──────────────────────────────────────── */
+.sda-btn {
+    display: inline-flex; align-items: center; gap: .45rem;
+    padding: .55rem 1.1rem; border-radius: 10px; border: none;
+    cursor: pointer; font-size: .88rem; font-weight: 600;
+    transition: background .2s, opacity .2s, transform .1s;
+    text-decoration: none; white-space: nowrap;
+}
+.sda-btn:active { transform: scale(.97); }
+.sda-btn:disabled { opacity: .45; cursor: not-allowed; }
+.sda-btn--primary { background: #6366f1; color: #fff; }
+.sda-btn--primary:hover:not(:disabled) { background: #4f46e5; }
+.sda-btn--secondary { background: rgba(99,102,241,.12); color: #818cf8; border: 1px solid rgba(99,102,241,.25); }
+.sda-btn--secondary:hover { background: rgba(99,102,241,.22); }
+.sda-btn--ghost { background: transparent; color: #94a3b8; border: 1px solid rgba(255,255,255,.1); }
+.sda-btn--ghost:hover { background: rgba(255,255,255,.05); color: #f1f5f9; }
+@media (max-width: 480px) { .sda-btn span { display: none; } .sda-btn { padding: .55rem .75rem; } }
+
+/* ── Score dashboard ─────────────────────────────────────── */
+.score-dash { background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 16px; overflow: hidden; }
+.score-dash__inner { padding: 1.5rem; }
+.score-dash__header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem; }
+.score-dash__title { margin: 0; font-size: 1rem; color: #f1f5f9; display: flex; align-items: center; gap: .5rem; }
+.score-dash__actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+.score-dash__empty { text-align: center; padding: 2.5rem 1rem; color: #64748b; }
+.score-dash__empty i { font-size: 2.5rem; margin-bottom: .75rem; display: block; }
+.score-dash__empty p { margin: 0; font-size: .9rem; }
+.score-dash__empty strong { color: #94a3b8; }
+
+/* Score ring */
+.score-overall { display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.5rem; }
+.score-ring { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+.score-ring svg { transform: rotate(-90deg); }
+.score-bg   { fill: none; stroke: #334155; stroke-width: 10; }
+.score-fill { fill: none; stroke-width: 10; stroke-linecap: round; stroke-dasharray: 327; stroke-dashoffset: 327; transition: stroke-dashoffset 1.2s ease, stroke .5s; }
+.score-ring__text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.score-ring__val { font-size: 2rem; font-weight: 800; line-height: 1; color: #f1f5f9; }
+.score-ring__max { font-size: .72rem; color: #64748b; }
+.score-overall__label { margin: 0 0 .25rem; color: #94a3b8; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+.score-overall__rating { margin: 0; font-size: 1.35rem; font-weight: 700; color: #f1f5f9; }
+
+/* Metrics grid */
+.metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
+@media (max-width: 500px) { .metrics-grid { grid-template-columns: 1fr; } }
+.metric-card { background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: .9rem 1rem; display: flex; gap: .75rem; align-items: flex-start; }
+.metric-card__icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(99,102,241,.15); color: #818cf8; display: flex; align-items: center; justify-content: center; font-size: .85rem; flex-shrink: 0; }
+.metric-card__body { flex: 1; min-width: 0; }
+.metric-card__top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: .4rem; gap: .5rem; }
+.metric-card__name { font-size: .8rem; color: #94a3b8; font-weight: 500; }
+.metric-card__val { font-size: .78rem; color: #64748b; white-space: nowrap; }
+.metric-card__val b { color: #f1f5f9; font-size: .95rem; }
+.metric-bar { background: #334155; border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: .4rem; }
+.metric-bar__fill { height: 100%; border-radius: 4px; width: 0; transition: width 1s ease; }
+.metric-card__fb { margin: 0; font-size: .75rem; color: #64748b; line-height: 1.4; }
+
+/* ── Comparison section ──────────────────────────────────── */
+.cmp-section { margin: 0; }
+.cmp-card { background: var(--bg-card, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 16px; overflow: hidden; }
+.cmp-card__header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,.06); }
+.cmp-card__header h3 { margin: 0; font-size: 1rem; color: #f1f5f9; display: flex; align-items: center; gap: .5rem; }
+#comparison-content { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* Dual waveform */
+.cmp-waves { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 640px) { .cmp-waves { grid-template-columns: 1fr; } }
+.cmp-wave-panel { background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: .9rem 1rem; }
+.cmp-wave-label { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; font-size: .8rem; color: #94a3b8; font-weight: 500; }
+.cmp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.cmp-dot--orig { background: #6366f1; }
+.cmp-dot--rec  { background: #10b981; }
+.cmp-play-inline { margin-left: auto; background: rgba(255,255,255,.08); border: none; color: #94a3b8; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: .75rem; display: flex; align-items: center; justify-content: center; }
+.cmp-play-inline:hover { background: rgba(255,255,255,.15); color: #f1f5f9; }
+.cmp-wave-host { min-height: 72px; }
+
+/* Transport controls */
+.cmp-controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+.cmp-mode-btns { display: flex; gap: .35rem; flex-wrap: wrap; }
+.cmp-mode { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); color: #94a3b8; border-radius: 8px; padding: .35rem .75rem; font-size: .78rem; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.cmp-mode:hover  { background: rgba(255,255,255,.1); color: #f1f5f9; }
+.cmp-mode.active { background: rgba(99,102,241,.2); border-color: rgba(99,102,241,.5); color: #818cf8; font-weight: 600; }
+.cmp-transport { display: flex; gap: .4rem; }
+.cmp-ctrl { width: 36px; height: 36px; border-radius: 8px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); color: #94a3b8; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: .85rem; transition: background .2s, color .2s; }
+.cmp-ctrl:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+/* Spectrograms */
+.cmp-spectro { }
+.cmp-spectro__title { font-size: .82rem; color: #64748b; display: flex; align-items: center; gap: .4rem; margin-bottom: .6rem; text-transform: uppercase; letter-spacing: .05em; }
+.cmp-spectro__grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+@media (max-width: 480px) { .cmp-spectro__grid { grid-template-columns: 1fr; } }
+.cmp-spectro__panel { background: #0f172a; border-radius: 10px; overflow: hidden; }
+.cmp-spectro__panel span { display: block; font-size: .7rem; color: #64748b; padding: .4rem .6rem .2rem; text-transform: uppercase; letter-spacing: .05em; }
+.cmp-spectro__panel canvas { width: 100%; display: block; }
+
+/* Stat bars (populated after analysis) */
+.cmp-stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+@media (max-width: 500px) { .cmp-stat-row { grid-template-columns: 1fr; } }
+.cmp-stat { background: rgba(0,0,0,.2); border-radius: 10px; padding: .75rem 1rem; }
+.cmp-stat__label { display: flex; align-items: center; gap: .4rem; font-size: .78rem; color: #94a3b8; margin-bottom: .5rem; }
+.cmp-stat__label i { color: #6366f1; }
+.cmp-stat__bar { background: #334155; border-radius: 4px; height: 8px; overflow: hidden; margin-bottom: .35rem; }
+.cmp-stat__fill { height: 100%; border-radius: 4px; width: 0; transition: width 1s ease; }
+.cmp-stat__val { font-size: .82rem; font-weight: 600; color: #f1f5f9; }
+
+/* ── Toast ───────────────────────────────────────────────── */
+.app-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(16px);
+    padding: .65rem 1.4rem; border-radius: 50px; font-size: .86rem; font-weight: 500;
+    box-shadow: 0 4px 24px rgba(0,0,0,.45); opacity: 0; pointer-events: none;
+    transition: opacity .3s, transform .3s; z-index: 9999; white-space: nowrap;
+}
+.app-toast--show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.app-toast--success { background: #065f46; color: #6ee7b7; border: 1px solid #10b981; }
+.app-toast--error   { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
+.app-toast--warning { background: #78350f; color: #fcd34d; border: 1px solid #f59e0b; }
+.app-toast--info    { background: #1e1b4b; color: #a5b4fc; border: 1px solid #6366f1; }
+</style>
 {% endblock %}

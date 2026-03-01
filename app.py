@@ -118,7 +118,12 @@ def compare(project_id):
     project = load_project(project_id)
     if not project:
         return redirect(url_for('index'))
-    return render_template('compare.html', project=project)
+    vocal_stem = find_vocal_stem(project)
+    has_vocals = vocal_stem is not None
+    recording_path = os.path.join(PROJECTS_FOLDER, project_id, 'recording.wav')
+    has_recording = project.get('has_recording', False) and os.path.exists(recording_path)
+    return render_template('compare.html', project=project,
+                           has_vocals=has_vocals, has_recording=has_recording)
 
 
 @app.route('/projects')
@@ -178,8 +183,8 @@ def upload():
         print(f"Saved file to: {upload_path}")
         print(f"File size: {os.path.getsize(upload_path)} bytes")
 
-        # Run separation — use model from settings (falls back to htdemucs)
-        saved_model = load_settings().get('default_model', 'htdemucs')
+        # Run separation — prefer model from form, fall back to settings
+        saved_model = request.form.get('model') or load_settings().get('default_model', 'htdemucs')
         output_folder = os.path.join(project_folder, 'stems')
         print(f"\nStarting Demucs separation...")
         print(f"Project ID: {project_id}")
@@ -202,7 +207,7 @@ def upload():
             'name': original_name,
             'original_file': upload_path,
             'stems_folder': stems_path,
-            'model': 'htdemucs',
+            'model': saved_model,
             'created_at': datetime.now().isoformat(),
             'has_recording': False,
             'score': None
@@ -219,6 +224,89 @@ def upload():
 
     except Exception as e:
         print(f"\nEXCEPTION in upload handler: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print("="*50 + "\n")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/upload-url', methods=['POST'])
+def upload_url():
+    """Download audio from a URL (YouTube / direct link) then separate stems."""
+    from services.url_service import download_from_url, is_youtube_url
+
+    print("\n" + "="*50)
+    print("URL UPLOAD REQUEST RECEIVED")
+    print("="*50)
+
+    try:
+        body = request.get_json(silent=True) or {}
+        url  = (body.get('url') or '').strip()
+        model = body.get('model') or load_settings().get('default_model', 'htdemucs')
+
+        if not url:
+            return jsonify({'success': False, 'error': 'No URL provided'}), 400
+
+        # Create project folder
+        project_id     = datetime.now().strftime('%Y%m%d_%H%M%S')
+        project_folder = os.path.join(PROJECTS_FOLDER, project_id)
+        os.makedirs(project_folder, exist_ok=True)
+        print(f"Created project folder: {project_folder}")
+        print(f"URL: {url}")
+
+        # Download audio
+        download_folder = os.path.join(project_folder, 'downloads')
+        os.makedirs(download_folder, exist_ok=True)
+        audio_path, video_title = download_from_url(url, download_folder)
+
+        if not audio_path or not os.path.exists(audio_path):
+            return jsonify({'success': False, 'error': 'Failed to download audio from URL. Make sure the URL is valid and accessible.'}), 400
+
+        print(f"Downloaded to: {audio_path}")
+        print(f"File size: {os.path.getsize(audio_path)} bytes")
+
+        # Use captured video title; fall back to filename-derived name
+        if video_title:
+            original_name = video_title
+        else:
+            import re as _re
+            original_name = os.path.splitext(os.path.basename(audio_path))[0]
+            original_name = _re.sub(r'^\d{8}_\d{6}_', '', original_name)
+
+        # Run Demucs separation
+        output_folder = os.path.join(project_folder, 'stems')
+        print(f"Starting Demucs separation with model '{model}'…")
+        stems_path = separate_audio(audio_path, model=model, output_folder=output_folder)
+
+        if not stems_path:
+            return jsonify({'success': False, 'error': 'Audio separation failed. Check server logs.'}), 500
+
+        print(f"Separation complete! Stems: {stems_path}")
+
+        # Save metadata
+        project_data = {
+            'id':            project_id,
+            'name':          original_name,
+            'original_file': audio_path,
+            'stems_folder':  stems_path,
+            'model':         model,
+            'created_at':    datetime.now().isoformat(),
+            'has_recording': False,
+            'score':         None,
+            'source_url':    url,
+        }
+        save_project_metadata(project_id, project_data)
+        print("Metadata saved.")
+        print("="*50 + "\n")
+
+        return jsonify({
+            'success':      True,
+            'project_id':   project_id,
+            'redirect_url': url_for('mixer', project_id=project_id)
+        })
+
+    except Exception as e:
+        print(f"\nEXCEPTION in upload_url: {str(e)}")
         import traceback
         traceback.print_exc()
         print("="*50 + "\n")
@@ -361,23 +449,67 @@ def api_clear_cache():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/project-requirements/<project_id>', methods=['GET'])
+def project_requirements(project_id):
+    """Return which requirements are available for comparison and AI scoring"""
+    try:
+        project = load_project(project_id)
+        if not project:
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+        vocal_stem = find_vocal_stem(project)
+        recording_path = os.path.join(PROJECTS_FOLDER, project_id, 'recording.wav')
+        has_recording = os.path.exists(recording_path)
+
+        vocal_url = None
+        if vocal_stem:
+            vocal_url = '/files/' + vocal_stem.replace('\\', '/')
+
+        recording_url = None
+        if has_recording:
+            recording_url = f'/files/projects/{project_id}/recording.wav'
+
+        return jsonify({
+            'success': True,
+            'has_vocals': vocal_stem is not None,
+            'has_recording': has_recording,
+            'vocal_url': vocal_url,
+            'recording_url': recording_url,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/analyze-performance/<project_id>', methods=['POST'])
 def analyze_performance(project_id):
     """Analyze vocal performance using AI"""
     try:
-        # TODO: Implement actual AI analysis
-        # Mock response for now
-        analysis = {
-            'overall_score': 85,
-            'pitch_accuracy': 88,
-            'timing_accuracy': 82,
-            'volume_stability': 87,
-            'similarity': 84,
-            'feedback': 'Great performance! Your pitch control is excellent. Work on timing in faster sections.'
-        }
-        
-        # Update project with score
         project = load_project(project_id)
+        if not project:
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+        # Require isolated vocal stem
+        vocal_stem = find_vocal_stem(project)
+        if not vocal_stem:
+            return jsonify({
+                'success': False,
+                'error': 'Isolated vocal track not found. The stems folder may be missing or incomplete. '
+                         'Please re-process the audio to regenerate stems.'
+            }), 400
+
+        # Require user recording
+        recording_path = os.path.join(PROJECTS_FOLDER, project_id, 'recording.wav')
+        if not os.path.exists(recording_path):
+            return jsonify({
+                'success': False,
+                'error': 'No vocal recording found. Please record your vocals on the Karaoke page first.'
+            }), 400
+
+        # Real audio analysis
+        from services.scoring_service import analyze_vocal_accuracy
+        analysis = analyze_vocal_accuracy(vocal_stem, recording_path)
+
+        # Update project with score
         if project:
             project['score'] = analysis['overall_score']
             save_project_metadata(project_id, project)
@@ -454,6 +586,17 @@ def serve_file(filename):
 # HELPER FUNCTIONS
 # ============================================
 
+def find_vocal_stem(project):
+    """Find the isolated vocals stem file for a project. Returns absolute path or None."""
+    stems_folder = project.get('stems_folder', '')
+    if not stems_folder or not os.path.exists(stems_folder):
+        return None
+    for f in os.listdir(stems_folder):
+        if f.startswith('vocals') and f.endswith('.wav'):
+            return os.path.join(stems_folder, f)
+    return None
+
+
 def save_project_metadata(project_id, data):
     """Save project metadata to JSON file"""
     project_folder = os.path.join(PROJECTS_FOLDER, project_id)
@@ -491,6 +634,16 @@ def get_all_projects():
         if os.path.isdir(project_folder):
             project = load_project(project_id)
             if project:
+                # Scan the stems folder so templates can display stem badges
+                stems_folder = project.get('stems_folder', '')
+                if stems_folder and os.path.exists(stems_folder):
+                    project['stems'] = {
+                        os.path.splitext(f)[0]: True
+                        for f in os.listdir(stems_folder)
+                        if f.endswith('.wav')
+                    }
+                else:
+                    project.setdefault('stems', {})
                 projects.append(project)
     
     # Sort by creation date (newest first)

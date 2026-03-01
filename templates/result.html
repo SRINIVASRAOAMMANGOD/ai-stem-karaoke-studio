@@ -1,13 +1,46 @@
-<h2>Separated Stems</h2>
+{% extends 'base.html' %}
+{% block title %}Separated Stems{% endblock %}
 
-<h3>Vocals</h3>
-<audio controls src="{{ url_for('serve_separated_file', filename=folder + '/vocals.wav') }}"></audio>
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2><i class="fas fa-music"></i> Separated Stems</h2>
+        <div class="actions">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
 
-<h3>Drums</h3>
-<audio controls src="{{ url_for('serve_separated_file', filename=folder + '/drums.wav') }}"></audio>
-
-<h3>Bass</h3>
-<audio controls src="{{ url_for('serve_separated_file', filename=folder + '/bass.wav') }}"></audio>
-
-<h3>Other</h3>
-<audio controls src="{{ url_for('serve_separated_file', filename=folder + '/other.wav') }}"></audio>
+    <div class="stems-grid">
+        <div class="stem-control">
+            <div class="stem-header">
+                <div class="stem-title"><i class="fas fa-microphone"></i> Vocals</div>
+            </div>
+            <audio controls style="width:100%;"
+                   src="{{ url_for('serve_separated_file', filename=folder + '/vocals.wav') }}"></audio>
+        </div>
+        <div class="stem-control">
+            <div class="stem-header">
+                <div class="stem-title"><i class="fas fa-drum"></i> Drums</div>
+            </div>
+            <audio controls style="width:100%;"
+                   src="{{ url_for('serve_separated_file', filename=folder + '/drums.wav') }}"></audio>
+        </div>
+        <div class="stem-control">
+            <div class="stem-header">
+                <div class="stem-title"><i class="fas fa-guitar"></i> Bass</div>
+            </div>
+            <audio controls style="width:100%;"
+                   src="{{ url_for('serve_separated_file', filename=folder + '/bass.wav') }}"></audio>
+        </div>
+        <div class="stem-control">
+            <div class="stem-header">
+                <div class="stem-title"><i class="fas fa-music"></i> Other</div>
+            </div>
+            <audio controls style="width:100%;"
+                   src="{{ url_for('serve_separated_file', filename=folder + '/other.wav') }}"></audio>
+        </div>
+    </div>
+</div>
+{% endblock %}

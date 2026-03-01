@@ -249,6 +249,10 @@ async function handleFileUpload(e) {
     const formData = new FormData();
     formData.append('file', file);
 
+    // Include selected model if available
+    const modelSelect = document.getElementById('model-select');
+    if (modelSelect) formData.append('model', modelSelect.value);
+
     try {
         showProgressSection();
         updateProgress(10, 'Uploading file...');
@@ -300,34 +304,49 @@ async function handleUrlUpload(e) {
     const url = urlInput?.value.trim();
     
     if (!url) {
-        showAlert('Please enter a URL', 'error');
+        showAlert('Please enter a YouTube or direct audio URL', 'error');
         return;
     }
-    
+
+    const modelSelect = document.getElementById('model-select');
+    const model = modelSelect?.value || 'htdemucs';
+
     try {
         showProgressSection();
-        updateProgress(0, 'Downloading from URL...');
-        
+        updateProgress(5, 'Connecting to URL…');
+
+        const controller = new AbortController();
+        // YouTube downloads + Demucs can take several minutes
+        const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min
+
+        updateProgress(15, 'Downloading audio (this may take a moment for YouTube)…');
+
         const response = await fetch('/upload-url', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ url })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, model }),
+            signal: controller.signal
         });
-        
+
+        clearTimeout(timeoutId);
+
+        updateProgress(55, 'Separating stems with Demucs… This may take 1–3 minutes.');
+
         const data = await response.json();
-        
+
         if (data.success) {
-            updateProgress(100, 'Complete!');
-            showAlert('Download and separation completed!', 'success');
-            showResultSections(data);
+            updateProgress(100, 'Complete! Redirecting to mixer…');
+            setTimeout(() => { window.location.href = data.redirect_url; }, 1200);
         } else {
             throw new Error(data.error || 'URL processing failed');
         }
     } catch (error) {
         console.error('URL upload error:', error);
-        showAlert(error.message, 'error');
+        if (error.name === 'AbortError') {
+            showAlert('Request timed out after 10 minutes. Try a shorter clip.', 'error');
+        } else {
+            showAlert('Error: ' + error.message, 'error');
+        }
         hideProgressSection();
     }
 }

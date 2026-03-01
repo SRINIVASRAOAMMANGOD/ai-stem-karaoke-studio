@@ -11,65 +11,108 @@ def is_youtube_url(url):
 
 def download_from_url(url, output_folder):
     """
-    Download audio from URL (YouTube or direct audio link)
-    
-    Args:
-        url: The URL to download from
-        output_folder: Folder to save the downloaded file
-        
+    Download audio from URL (YouTube or direct audio link).
+
     Returns:
-        Path to downloaded file or None if failed
+        Tuple (file_path, display_title) where display_title may be None
+        for direct audio downloads.  file_path is None on failure.
     """
     try:
         if is_youtube_url(url):
             return download_from_youtube(url, output_folder)
         else:
-            return download_direct_audio(url, output_folder)
+            path = download_direct_audio(url, output_folder)
+            return path, None
     except Exception as e:
         print(f"Error downloading from URL: {e}")
-        return None
+        return None, None
 
 
 def download_from_youtube(url, output_folder):
     """
-    Download audio from YouTube using yt-dlp
-    
-    Note: Requires yt-dlp to be installed: pip install yt-dlp
+    Download audio from YouTube using yt-dlp.
+
+    Uses a fixed base name ('yt_audio') so the on-disk path is fully
+    predictable regardless of video title or OS filename sanitization.
+    Falls back to scanning the folder if the expected file isn't found.
     """
     try:
         import yt_dlp
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
+
+        os.makedirs(output_folder, exist_ok=True)
+
+        # Fixed base name avoids all title-sanitization surprises
+        base        = os.path.join(output_folder, 'yt_audio')
+        expected_mp3 = base + '.mp3'
+
+        # Track the final filename and title via yt-dlp hooks
+        final_path       = [None]
+        info_dict_holder = {}
+
+        def _pp_hook(d):
+            if d.get('status') == 'finished':
+                final_path[0] = d.get('info_dict', {}).get('filepath') or d.get('filename')
+                info_dict_holder.update(d.get('info_dict', {}))
+
+        def _dl_hook(d):
+            if d.get('status') == 'finished' and not final_path[0]:
+                final_path[0] = d.get('filename')
+                info_dict_holder.update(d.get('info_dict', {}))
+
         ydl_opts = {
             'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-                'preferredquality': '320',
+                'preferredquality': '192',
             }],
-            'outtmpl': os.path.join(output_folder, f'{timestamp}_%(title)s.%(ext)s'),
-            'quiet': False,
-            'no_warnings': False,
+            'outtmpl':             base + '.%(ext)s',
+            'quiet':               False,
+            'no_warnings':         False,
+            'progress_hooks':      [_dl_hook],
+            'postprocessor_hooks': [_pp_hook],
         }
-        
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            # Replace extension with mp3
-            filename = os.path.splitext(filename)[0] + '.mp3'
-            
-            if os.path.exists(filename):
-                return filename
-            
-        return None
-        
+            ydl.download([url])
+
+        # Resolve path using multiple strategies
+        resolved = None
+
+        # 1) Trust the hook result first
+        if final_path[0] and os.path.exists(final_path[0]):
+            resolved = final_path[0]
+
+        # 2) Expected fixed mp3 path
+        if not resolved and os.path.exists(expected_mp3):
+            resolved = expected_mp3
+
+        # 3) Scan folder for any audio file that was just created
+        if not resolved:
+            audio_exts = ('.mp3', '.m4a', '.opus', '.webm', '.ogg', '.flac', '.wav')
+            candidates = [
+                os.path.join(output_folder, f)
+                for f in os.listdir(output_folder)
+                if f.lower().endswith(audio_exts)
+            ]
+            if candidates:
+                candidates.sort(key=os.path.getmtime, reverse=True)
+                resolved = candidates[0]
+
+        if not resolved:
+            print('[url_service] YouTube download produced no audio file.')
+            return None, None
+
+        title = info_dict_holder.get('title')
+        return resolved, title
+
     except ImportError:
-        print("yt-dlp not installed. Install with: pip install yt-dlp")
-        return None
+        print('yt-dlp not installed. Install with: pip install yt-dlp')
+        return None, None
     except Exception as e:
-        print(f"Error downloading from YouTube: {e}")
-        return None
+        print(f'Error downloading from YouTube: {e}')
+        import traceback; traceback.print_exc()
+        return None, None
 
 
 def download_direct_audio(url, output_folder):

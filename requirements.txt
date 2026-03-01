@@ -36,6 +36,9 @@ lameenc==1.8.1
 # ── Audio Processing ─────────────────────────────────────────
 numpy==2.4.2
 tqdm==4.67.3
+librosa==0.11.0           # vocal scoring (pitch / timing / tone analysis)
+mir_eval>=0.7             # MIR evaluation metrics (raw pitch accuracy, onset F-measure)
+scipy>=1.13.0             # librosa dependency
 
 # ── YouTube / URL Download ────────────────────────────────────
 yt-dlp==2026.2.4

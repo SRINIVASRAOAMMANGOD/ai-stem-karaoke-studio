@@ -1,31 +1,64 @@
 <section class="upload-section" id="upload-section">
     <div class="upload-container">
-        <!-- File Upload -->
-        <form id="upload-form" enctype="multipart/form-data" method="POST" action="/upload">
-            <div class="upload-area" id="upload-area">
-                <i class="fas fa-cloud-upload-alt"></i>
-                <h3>Drag & Drop your audio file here</h3>
-                <p>or</p>
-                <label for="file-input" class="btn btn-primary">
-                    <i class="fas fa-folder-open"></i> Browse Files
-                </label>
-                <input type="file" id="file-input" name="file" accept="audio/*" hidden>
-                <p class="file-info">Supported formats: MP3, WAV, FLAC, OGG (Max 50MB)</p>
-                <p class="file-info"><strong>Model:</strong> HT-Demucs (Best Quality)</p>
-            </div>
-            <div class="selected-file" id="selected-file" style="display: none;">
-                <i class="fas fa-file-audio"></i>
-                <span class="file-name"></span>
-                <button type="button" class="btn-remove">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <button type="submit" class="btn btn-primary btn-submit">
-                <i class="fas fa-magic"></i> Separate Stems with AI
+        <!-- Tabs -->
+        <div class="upload-tabs">
+            <button class="tab-btn active" data-tab="file">
+                <i class="fas fa-folder-open"></i> Upload File
             </button>
-        </form>
+            <button class="tab-btn" data-tab="url">
+                <i class="fab fa-youtube"></i> YouTube / URL
+            </button>
+        </div>
+
+        <!-- File Upload Tab -->
+        <div class="tab-content active" id="file-tab">
+            <form id="upload-form" enctype="multipart/form-data" method="POST" action="/upload">
+                <div class="upload-area" id="upload-area">
+                    <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                    <h3>Drag &amp; Drop your audio file here</h3>
+                    <p>or</p>
+                    <label for="file-input" class="btn btn-primary">
+                        <i class="fas fa-folder-open"></i> Browse Files
+                    </label>
+                    <input type="file" id="file-input" name="file" accept="audio/*" hidden>
+                    <p class="file-info">Supported formats: MP3, WAV, FLAC, OGG &nbsp;|&nbsp; Max 50 MB</p>
+                </div>
+                <div class="selected-file" id="selected-file" style="display:none;">
+                    <i class="fas fa-file-audio"></i>
+                    <span class="file-name"></span>
+                    <button type="button" class="btn-remove"><i class="fas fa-times"></i></button>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-submit">
+                    <i class="fas fa-magic"></i> Separate Stems
+                </button>
+            </form>
+        </div>
+
+        <!-- URL Tab -->
+        <div class="tab-content" id="url-tab">
+            <form id="url-form">
+                <div class="url-input-group">
+                    <input type="url" id="url-input" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-download"></i> Fetch &amp; Separate
+                    </button>
+                </div>
+                <p class="url-info"><i class="fas fa-info-circle"></i> YouTube, SoundCloud and direct audio links are supported.</p>
+            </form>
+        </div>
+
+        <!-- Model selector — shared by both tabs -->
+        <div class="model-selection">
+            <label for="model-select"><i class="fas fa-microchip"></i> Separation Model</label>
+            <select id="model-select" name="model">
+                <option value="htdemucs" selected>HT-Demucs (Best Quality)</option>
+                <option value="htdemucs_ft">HT-Demucs Fine-tuned</option>
+                <option value="htdemucs_6s">HT-Demucs 6-Stems</option>
+                <option value="mdx_extra">MDX Extra</option>
+            </select>
+        </div>
     </div>
 </section>
 
-<!-- Event listeners are handled by script.js initUploadFeatures() -->
-
+<!-- Tab switching handled by script.js -->

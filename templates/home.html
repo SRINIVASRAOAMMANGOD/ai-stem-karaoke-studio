@@ -4,51 +4,69 @@
 
 {% block content %}
 <div class="container">
+
+    <!-- Hero -->
     <div class="hero-section">
-        <h1>AI STEM Karaoke Studio</h1>
-        <p class="subtitle">Upload your audio file to separate stems using AI-powered Demucs technology</p>
+        <h1>STEM Karaoke Studio</h1>
+        <p class="subtitle">Upload any song and Demucs will separate it into stems — then sing along, record yourself and compare your performance.</p>
+        <div class="hero-buttons">
+            <a href="{{ url_for('projects') }}" class="btn btn-secondary">
+                <i class="fas fa-folder-open"></i> My Projects
+            </a>
+        </div>
     </div>
 
     <!-- Upload Section -->
     {% include 'components/upload_section.html' %}
-    
+
     <!-- Progress Bar -->
     <section class="progress-section" id="progress-section" style="display: none;">
         <div class="progress-container">
             <div class="progress-header">
-                <h3 id="progress-title">Processing Audio...</h3>
+                <h3 id="progress-title">Processing Audio…</h3>
                 <span id="progress-percentage">0%</span>
             </div>
-            
             <div class="progress-bar-wrapper">
                 <div class="progress-bar">
                     <div class="progress-fill" id="progress-fill"></div>
                 </div>
             </div>
-            
             <div class="progress-status">
-                <p id="progress-message">Initializing...</p>
+                <p id="progress-message">Initializing…</p>
                 <div class="progress-steps">
-                    <div class="step" data-step="upload">
-                        <i class="fas fa-upload"></i>
-                        <span>Upload</span>
-                    </div>
-                    <div class="step" data-step="separate">
-                        <i class="fas fa-magic"></i>
-                        <span>Separate</span>
-                    </div>
-                    <div class="step" data-step="process">
-                        <i class="fas fa-cog"></i>
-                        <span>Process</span>
-                    </div>
-                    <div class="step" data-step="complete">
-                        <i class="fas fa-check"></i>
-                        <span>Complete</span>
-                    </div>
+                    <div class="step" data-step="upload"><i class="fas fa-upload"></i><span>Upload</span></div>
+                    <div class="step" data-step="separate"><i class="fas fa-magic"></i><span>Separate</span></div>
+                    <div class="step" data-step="process"><i class="fas fa-cog"></i><span>Process</span></div>
+                    <div class="step" data-step="complete"><i class="fas fa-check"></i><span>Complete</span></div>
                 </div>
             </div>
         </div>
     </section>
+
+    <!-- Feature Cards -->
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-magic"></i></div>
+            <h3>Stem Separation</h3>
+            <p>Powered by HT-Demucs — split any track into vocals, drums, bass and other.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-sliders-h"></i></div>
+            <h3>Stem Mixer</h3>
+            <p>Adjust volume, mute, solo each stem individually and export your custom mix.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-microphone-alt"></i></div>
+            <h3>Karaoke Mode</h3>
+            <p>Mute the vocals and record yourself singing over the backing track.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-chart-bar"></i></div>
+            <h3>Performance Analysis</h3>
+            <p>Compare your recording against the original vocal stem across 6 metrics.</p>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
 
