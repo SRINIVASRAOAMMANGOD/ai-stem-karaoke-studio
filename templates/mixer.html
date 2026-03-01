@@ -1,0 +1,697 @@
+{% extends 'base.html' %}
+
+{% block title %}Mixer - {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2><i class="fas fa-sliders-h"></i> Stem Mixer - {{ project.name }}</h2>
+        <div class="actions">
+            <a href="{{ url_for('karaoke', project_id=project.id) }}" class="btn btn-primary">
+                <i class="fas fa-microphone"></i> Go to Karaoke
+            </a>
+            <a href="{{ url_for('projects') }}" class="btn btn-secondary">
+                <i class="fas fa-folder"></i> Back to Projects
+            </a>
+        </div>
+    </div>
+
+    <!-- Waveform Visualization -->
+    {% include 'components/waveform_section.html' %}
+    
+    <!-- Master Controls -->
+    {% include 'components/master_controls.html' %}
+    
+    <!-- Stem Controls -->
+    {% include 'components/stem_controls.html' %}
+
+    <!-- Quick Actions (pinned at bottom) -->
+    <section class="quick-actions-section" id="quick-actions-section" style="display:none;">
+        <div class="quick-actions-inner">
+            <span class="qa-title"><i class="fas fa-bolt"></i> Quick Actions</span>
+            <div class="qa-buttons">
+                <button class="btn btn-secondary qa-btn" id="reset-all-btn">
+                    <i class="fas fa-undo"></i> Reset All
+                </button>
+                <button class="btn btn-secondary qa-btn" id="export-mix-btn">
+                    <i class="fas fa-file-export"></i> Export Mix
+                </button>
+                <button class="btn btn-primary qa-btn" id="save-project-btn">
+                    <i class="fas fa-save"></i> Save Project
+                </button>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- WaveSurfer.js for waveform visualization -->
+<script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+<script>
+const projectId = '{{ project.id }}';
+
+// Track audio objects and state
+const audioPlayers = {};   // { vocals: Audio, drums: Audio, bass: Audio, other: Audio }
+const stemVolumes  = {};   // { vocals: 0-1, ... }
+const stemMuted    = {};   // { vocals: bool, ... }
+const stemSoloed   = {};   // { vocals: bool, ... }
+let masterVolume   = 0.8;
+let isPlaying      = false;
+let loopEnabled    = false;
+
+// WaveSurfer instances
+let wsMain = null;           // main waveform (drives time / seek)
+const wsMini = {};           // { vocals: WaveSurfer, ... } mini stem waveforms
+const WAVE_COLORS = {
+    vocals: { wave: '#6366f1', prog: '#4338ca' },
+    drums:  { wave: '#f59e0b', prog: '#b45309' },
+    bass:   { wave: '#10b981', prog: '#047857' },
+    other:  { wave: '#ef4444', prog: '#b91c1c' },
+};
+
+// ── Load stems from API ──────────────────────────────────────────────────────
+async function initMixer() {
+    try {
+        const res  = await fetch(`/api/stems/${projectId}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            showMixerError('Could not load stems: ' + (data.error || 'unknown error'));
+            return;
+        }
+
+        const stems = data.stems;   // { vocals: '/files/...', drums: '...', ... }
+        if (!stems || Object.keys(stems).length === 0) {
+            showMixerError('No stem files found for this project.');
+            return;
+        }
+
+        // Create one <audio> element per stem
+        for (const [name, url] of Object.entries(stems)) {
+            const audio = new Audio(url);
+            audio.preload = 'auto';
+            audioPlayers[name] = audio;
+            stemVolumes[name]  = 0.8;
+            stemMuted[name]    = false;
+            stemSoloed[name]   = false;
+        }
+
+        // Show all hidden control sections
+        ['waveform-section', 'master-controls-section', 'stem-controls-section', 'quick-actions-section'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'block';
+        });
+
+        buildStemCards(stems);
+        bindMasterControls();
+        initWaveSurfers(stems);
+        console.log('[Mixer] Loaded stems:', Object.keys(stems));
+
+    } catch (err) {
+        showMixerError('Network error loading stems: ' + err.message);
+    }
+}
+
+// ── WaveSurfer visualization ─────────────────────────────────────────────────
+function initWaveSurfers(stems) {
+    if (typeof WaveSurfer === 'undefined') {
+        console.warn('[Mixer] WaveSurfer not available');
+        return;
+    }
+
+    // Pick the best stem for the main waveform
+    const mainName = ['vocals','bass','drums','other'].find(s => stems[s]) || Object.keys(stems)[0];
+    const mainUrl  = stems[mainName];
+
+    wsMain = WaveSurfer.create({
+        container:    '#waveform-main',
+        url:          mainUrl,
+        waveColor:    '#7c3aed',
+        progressColor:'#5b21b6',
+        height:       128,
+        normalize:    true,
+        interact:     true,
+    });
+
+    // Mute WaveSurfer's own audio — the Audio objects handle sound
+    wsMain.on('ready', () => {
+        wsMain.setVolume(0);
+        updateTimeDisplay(0, wsMain.getDuration());
+    });
+
+    // Drive all playback state from WaveSurfer's clock
+    wsMain.on('timeupdate', (current) => {
+        updateTimeDisplay(current, wsMain.getDuration());
+        // Keep Audio elements in sync (correct drift > 200 ms)
+        if (isPlaying) {
+            for (const audio of Object.values(audioPlayers)) {
+                if (Math.abs(audio.currentTime - current) > 0.2) {
+                    audio.currentTime = current;
+                }
+            }
+        }
+        // Nudge mini waveforms to the same position
+        for (const ws of Object.values(wsMini)) {
+            try { ws.setTime(current); } catch (_) {}
+        }
+    });
+
+    // User clicked on the main waveform → seek everything
+    wsMain.on('seeking', (current) => {
+        for (const audio of Object.values(audioPlayers)) {
+            audio.currentTime = current;
+        }
+        for (const ws of Object.values(wsMini)) {
+            try { ws.setTime(current); } catch (_) {}
+        }
+    });
+
+    // Song ended
+    wsMain.on('finish', () => {
+        if (loopEnabled) {
+            // restart all audio + waveform
+            for (const audio of Object.values(audioPlayers)) {
+                audio.currentTime = 0;
+                audio.play().catch(() => {});
+            }
+            wsMain.play();
+            isPlaying = true;
+            return;
+        }
+        isPlaying = false;
+        for (const audio of Object.values(audioPlayers)) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+        const pb = document.getElementById('play-btn');
+        const ps = document.getElementById('pause-btn');
+        if (pb) pb.style.display = 'inline-flex';
+        if (ps) ps.style.display = 'none';
+        updateTimeDisplay(0, wsMain.getDuration());
+    });
+
+    // Mini waveforms — one per stem (not interactive, just visual)
+    for (const [name, url] of Object.entries(stems)) {
+        const el = document.getElementById(`waveform-${name}`);
+        if (!el) continue;
+        const c = WAVE_COLORS[name] || { wave: '#9ca3af', prog: '#6366f1' };
+        wsMini[name] = WaveSurfer.create({
+            container:    el,
+            url,
+            waveColor:    c.wave,
+            progressColor:c.prog,
+            height:       50,
+            normalize:    true,
+            interact:     false,
+        });
+        wsMini[name].on('ready', () => wsMini[name].setVolume(0));
+    }
+}
+
+// ── Build one card per stem ──────────────────────────────────────────────────
+function buildStemCards(stems) {
+    const icons = { vocals:'microphone', drums:'drum', bass:'guitar', other:'music' };
+    const grid  = document.querySelector('.stems-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    for (const [name] of Object.entries(stems)) {
+        const icon = icons[name] || 'music';
+        grid.insertAdjacentHTML('beforeend', `
+          <div class="stem-control" data-stem="${name}">
+            <div class="stem-header">
+              <div class="stem-title">
+                <i class="fas fa-${icon}"></i>
+                <span>${name.charAt(0).toUpperCase()+name.slice(1)}</span>
+              </div>
+              <div class="stem-actions">
+                <button class="btn-icon solo-btn"     data-stem="${name}" title="Solo"><i class="fas fa-headphones"></i></button>
+                <button class="btn-icon mute-btn"     data-stem="${name}" title="Mute"><i class="fas fa-volume-mute"></i></button>
+                <a      class="btn-icon download-btn" href="${stems[name]}" download title="Download"><i class="fas fa-download"></i></a>
+              </div>
+            </div>
+            <div class="stem-controls">
+              <div class="control-group">
+                <label>Volume</label>
+                <input type="range" class="volume-slider" data-stem="${name}" min="0" max="100" value="80">
+                <span class="control-value">80%</span>
+              </div>
+            </div>
+          </div>`);
+    }
+
+    // Bind per-stem controls
+    grid.querySelectorAll('.volume-slider').forEach(slider => {
+        slider.addEventListener('input', e => {
+            const stem = e.target.dataset.stem;
+            const val  = parseInt(e.target.value) / 100;
+            stemVolumes[stem] = val;
+            updateAudioVolumes();
+            e.target.closest('.control-group').querySelector('.control-value').textContent = e.target.value + '%';
+        });
+    });
+
+    grid.querySelectorAll('.mute-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const stem = btn.dataset.stem;
+            stemMuted[stem] = !stemMuted[stem];
+            btn.classList.toggle('active', stemMuted[stem]);
+            updateAudioVolumes();
+        });
+    });
+
+    grid.querySelectorAll('.solo-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const stem = btn.dataset.stem;
+            stemSoloed[stem] = !stemSoloed[stem];
+            btn.classList.toggle('active', stemSoloed[stem]);
+            updateAudioVolumes();
+        });
+    });
+}
+
+// ── Volume calculation (handles solo + mute) ─────────────────────────────────
+function updateAudioVolumes() {
+    const anysoloed = Object.values(stemSoloed).some(Boolean);
+    for (const [name, audio] of Object.entries(audioPlayers)) {
+        const muted   = stemMuted[name];
+        const soloed  = stemSoloed[name];
+        const blocked = anysoloed && !soloed;
+        audio.volume  = (muted || blocked) ? 0 : stemVolumes[name] * masterVolume;
+    }
+}
+
+// ── Master transport controls ────────────────────────────────────────────────
+function bindMasterControls() {
+    // Master volume
+    const mvSlider = document.getElementById('master-volume');
+    if (mvSlider) {
+        mvSlider.addEventListener('input', e => {
+            masterVolume = parseInt(e.target.value) / 100;
+            const disp = document.querySelector('.volume-value');
+            if (disp) disp.textContent = e.target.value + '%';
+            updateAudioVolumes();
+        });
+    }
+
+    // Play
+    const playBtn = document.getElementById('play-btn');
+    if (playBtn) playBtn.addEventListener('click', () => {
+        if (isPlaying) return;
+        isPlaying = true;
+        const t = wsMain ? wsMain.getCurrentTime() : (Object.values(audioPlayers)[0]?.currentTime || 0);
+        updateAudioVolumes();
+        for (const audio of Object.values(audioPlayers)) {
+            audio.currentTime = t;
+            audio.play().catch(e => console.warn('Play error:', e));
+        }
+        if (wsMain) wsMain.play();
+        else startTimeUpdater();
+        startVuMeter();
+        document.getElementById('play-btn').style.display  = 'none';
+        document.getElementById('pause-btn').style.display = 'inline-flex';
+    });
+
+    // Pause
+    const pauseBtn = document.getElementById('pause-btn');
+    if (pauseBtn) pauseBtn.addEventListener('click', () => {
+        isPlaying = false;
+        for (const audio of Object.values(audioPlayers)) audio.pause();
+        if (wsMain) wsMain.pause();
+        else clearInterval(_timerInterval);
+        stopVuMeter();
+        document.getElementById('play-btn').style.display  = 'inline-flex';
+        document.getElementById('pause-btn').style.display = 'none';
+    });
+
+    // Stop
+    const stopBtn = document.getElementById('stop-btn');
+    if (stopBtn) stopBtn.addEventListener('click', () => {
+        isPlaying = false;
+        for (const audio of Object.values(audioPlayers)) { audio.pause(); audio.currentTime = 0; }
+        if (wsMain) { wsMain.pause(); wsMain.setTime(0); }
+        else { clearInterval(_timerInterval); updateTimeDisplay(0); }
+        stopVuMeter();
+        document.getElementById('play-btn').style.display  = 'inline-flex';
+        document.getElementById('pause-btn').style.display = 'none';
+    });
+
+// ── VU Meter animation ──────────────────────────────────────────────────────
+let _vuRaf = null;
+let _vuL = 0, _vuR = 0; // smoothed 0-1 levels
+
+function startVuMeter() {
+    if (_vuRaf) return;
+    function tick() {
+        _vuRaf = requestAnimationFrame(tick);
+        // Simulate L/R levels — uses masterVolume as base + gentle random swing
+        const base = masterVolume;
+        const swing = 0.12;
+        const targetL = Math.min(1, base * (0.75 + Math.random() * swing * 2));
+        const targetR = Math.min(1, base * (0.75 + Math.random() * swing * 2));
+        // Smooth (fast attack, slow decay)
+        _vuL += (targetL > _vuL ? 0.35 : 0.06) * (targetL - _vuL);
+        _vuR += (targetR > _vuR ? 0.35 : 0.06) * (targetR - _vuR);
+        setVuBars(_vuL, _vuR);
+    }
+    tick();
+}
+
+function stopVuMeter() {
+    if (_vuRaf) { cancelAnimationFrame(_vuRaf); _vuRaf = null; }
+    // Decay to zero
+    let decay = setInterval(() => {
+        _vuL *= 0.82; _vuR *= 0.82;
+        setVuBars(_vuL, _vuR);
+        if (_vuL < 0.005 && _vuR < 0.005) {
+            clearInterval(decay);
+            setVuBars(0, 0);
+            const ldb = document.getElementById('vu-left-db');
+            const rdb = document.getElementById('vu-right-db');
+            if (ldb) ldb.textContent = '–∞';
+            if (rdb) rdb.textContent = '–∞';
+        }
+    }, 40);
+}
+
+function setVuBars(l, r) {
+    const lEl = document.getElementById('vu-left');
+    const rEl = document.getElementById('vu-right');
+    const lDb = document.getElementById('vu-left-db');
+    const rDb = document.getElementById('vu-right-db');
+    if (lEl) {
+        lEl.style.width = (l * 100).toFixed(1) + '%';
+        // Color: green → yellow → red
+        lEl.style.background = vuColor(l);
+    }
+    if (rEl) {
+        rEl.style.width = (r * 100).toFixed(1) + '%';
+        rEl.style.background = vuColor(r);
+    }
+    if (lDb && l > 0.005) lDb.textContent = toDb(l);
+    if (rDb && r > 0.005) rDb.textContent = toDb(r);
+}
+
+function vuColor(pct) {
+    if (pct > 0.85) return 'linear-gradient(90deg,#22c55e,#eab308,#ef4444)';
+    if (pct > 0.60) return 'linear-gradient(90deg,#22c55e,#eab308)';
+    return '#22c55e';
+}
+
+function toDb(pct) {
+    const db = 20 * Math.log10(Math.max(pct, 0.001));
+    return (db >= 0 ? '+' : '') + db.toFixed(0) + 'dB';
+}
+
+// ── Rewind 5s
+    const rwBtn = document.getElementById('rewind-btn');
+    if (rwBtn) rwBtn.addEventListener('click', () => {
+        const t = Math.max(0, (wsMain ? wsMain.getCurrentTime() : Object.values(audioPlayers)[0]?.currentTime || 0) - 5);
+        for (const audio of Object.values(audioPlayers)) audio.currentTime = t;
+        if (wsMain) wsMain.setTime(t);
+    });
+
+    // Forward 5s
+    const fwBtn = document.getElementById('forward-btn');
+    if (fwBtn) fwBtn.addEventListener('click', () => {
+        const t = (wsMain ? wsMain.getCurrentTime() : Object.values(audioPlayers)[0]?.currentTime || 0) + 5;
+        for (const audio of Object.values(audioPlayers)) audio.currentTime = t;
+        if (wsMain) wsMain.setTime(t);
+    });
+
+    // ── Loop ─────────────────────────────────────────────────────────────────
+    const loopBtn = document.getElementById('loop-btn');
+    if (loopBtn) {
+        loopBtn.addEventListener('click', () => {
+            loopEnabled = !loopEnabled;
+            loopBtn.classList.toggle('active', loopEnabled);
+            loopBtn.title = loopEnabled ? 'Loop: On' : 'Loop: Off';
+        });
+    }
+
+    // ── Tempo ─────────────────────────────────────────────────────────────────
+    let tempo = 100;
+    function applyTempo(val) {
+        tempo = Math.min(150, Math.max(50, val));
+        const rate = tempo / 100;
+        for (const audio of Object.values(audioPlayers)) audio.playbackRate = rate;
+        const display = document.getElementById('tempo-value');
+        const slider  = document.getElementById('tempo-slider');
+        if (display) display.textContent = tempo;
+        if (slider)  slider.value = tempo;
+    }
+    document.getElementById('tempo-up')    ?.addEventListener('click', () => applyTempo(tempo + 5));
+    document.getElementById('tempo-down')  ?.addEventListener('click', () => applyTempo(tempo - 5));
+    document.getElementById('tempo-reset') ?.addEventListener('click', () => applyTempo(100));
+    document.getElementById('tempo-slider')?.addEventListener('input', e => applyTempo(parseInt(e.target.value)));
+
+    // ── Pitch ─────────────────────────────────────────────────────────────────
+    // Pitch shift requires WebAudioAPI; we control it via AudioWorklet if available,
+    // otherwise update label only and show a toast.
+    let pitch = 0;
+    function applyPitch(val) {
+        pitch = Math.min(12, Math.max(-12, val));
+        const display = document.getElementById('pitch-value');
+        const slider  = document.getElementById('pitch-slider');
+        if (display) display.textContent = pitch >= 0 ? `+${pitch}` : pitch;
+        if (slider)  slider.value = pitch;
+        // Native pitch shift not supported in plain Audio; inform user
+        if (pitch !== 0) showToast('Pitch shift preview requires a DAW plugin. Value saved for export.', 'info');
+    }
+    document.getElementById('pitch-up')    ?.addEventListener('click', () => applyPitch(pitch + 1));
+    document.getElementById('pitch-down')  ?.addEventListener('click', () => applyPitch(pitch - 1));
+    document.getElementById('pitch-reset') ?.addEventListener('click', () => applyPitch(0));
+    document.getElementById('pitch-slider')?.addEventListener('input', e => applyPitch(parseInt(e.target.value)));
+
+    // ── Quick Actions ─────────────────────────────────────────────────────────
+
+    // Reset All
+    document.getElementById('reset-all-btn')?.addEventListener('click', () => {
+        // Volumes
+        for (const name of Object.keys(stemVolumes)) {
+            stemVolumes[name] = 0.8;
+            stemMuted[name]   = false;
+            stemSoloed[name]  = false;
+        }
+        updateAudioVolumes();
+        // Reset slider UI
+        document.querySelectorAll('.volume-slider').forEach(s => {
+            s.value = 80;
+            const cv = s.closest('.control-group')?.querySelector('.control-value');
+            if (cv) cv.textContent = '80%';
+        });
+        document.querySelectorAll('.mute-btn, .solo-btn').forEach(b => b.classList.remove('active'));
+        // Master volume
+        masterVolume = 0.8;
+        const mvSlider = document.getElementById('master-volume');
+        if (mvSlider) mvSlider.value = 80;
+        const mvDisp = document.querySelector('.volume-value');
+        if (mvDisp) mvDisp.textContent = '80%';
+        // Tempo + pitch
+        applyTempo(100);
+        applyPitch(0);
+        showToast('All settings reset to defaults.', 'success');
+    });
+
+    // Save Project
+    document.getElementById('save-project-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('save-project-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+        try {
+            const payload = {
+                volumes:       { ...stemVolumes },
+                muted:         { ...stemMuted },
+                soloed:        { ...stemSoloed },
+                master_volume: masterVolume,
+                tempo,
+                pitch,
+            };
+            const res  = await fetch(`/api/projects/${projectId}/save-mix`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (data.success) showToast('Project saved!', 'success');
+            else              showToast('Save failed: ' + data.error, 'error');
+        } catch (err) {
+            showToast('Save failed: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i> Save Project';
+        }
+    });
+
+    // Export Mix  (client-side offline render via Web Audio API)
+    document.getElementById('export-mix-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('export-mix-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting…';
+        showToast('Rendering mix — this may take a moment…', 'info');
+        try {
+            // Fetch & decode all active (non-muted) stems
+            const anysoloed = Object.values(stemSoloed).some(Boolean);
+            const entries   = Object.entries(audioPlayers);
+            const ctx       = new AudioContext();
+
+            const buffers = await Promise.all(entries.map(async ([name, audio]) => {
+                const resp = await fetch(audio.src);
+                const ab   = await resp.arrayBuffer();
+                const buf  = await ctx.decodeAudioData(ab);
+                return { name, buf };
+            }));
+
+            // Determine length from longest buffer
+            const duration   = Math.max(...buffers.map(b => b.buf.duration));
+            const sampleRate = buffers[0].buf.sampleRate;
+            const channels   = 2;
+            const offCtx     = new OfflineAudioContext(channels, Math.ceil(duration * sampleRate), sampleRate);
+
+            for (const { name, buf } of buffers) {
+                const muted   = stemMuted[name];
+                const soloed  = stemSoloed[name];
+                const blocked = anysoloed && !soloed;
+                if (muted || blocked) continue;
+
+                const src    = offCtx.createBufferSource();
+                src.buffer   = buf;
+                src.playbackRate.value = tempo / 100;
+
+                const gain   = offCtx.createGain();
+                gain.gain.value = stemVolumes[name] * masterVolume;
+
+                src.connect(gain);
+                gain.connect(offCtx.destination);
+                src.start(0);
+            }
+
+            const rendered = await offCtx.startRendering();
+            const wavBlob  = audioBufferToWav(rendered);
+            const url      = URL.createObjectURL(wavBlob);
+            const a        = document.createElement('a');
+            a.href         = url;
+            a.download     = `${projectId}_mix.wav`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Export complete!', 'success');
+        } catch (err) {
+            showToast('Export failed: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-file-export"></i> Export Mix';
+        }
+    });
+
+    // Auto-stop / duration fallback (WaveSurfer also handles these via 'finish' event)
+    const first = Object.values(audioPlayers)[0];
+    if (first) {
+        first.addEventListener('ended', () => {
+            isPlaying = false;
+            for (const audio of Object.values(audioPlayers)) { audio.pause(); audio.currentTime = 0; }
+            const pb = document.getElementById('play-btn');
+            const ps = document.getElementById('pause-btn');
+            if (pb) pb.style.display  = 'inline-flex';
+            if (ps) ps.style.display = 'none';
+        });
+        first.addEventListener('loadedmetadata', () => {
+            if (!wsMain) updateTimeDisplay(0, first.duration);
+        });
+    }
+}
+
+// ── Time display ─────────────────────────────────────────────────────────────
+let _timerInterval = null;
+function startTimeUpdater() {
+    clearInterval(_timerInterval);
+    const first = Object.values(audioPlayers)[0];
+    _timerInterval = setInterval(() => {
+        if (!first || !isPlaying) { clearInterval(_timerInterval); return; }
+        updateTimeDisplay(first.currentTime, first.duration);
+    }, 500);
+}
+function updateTimeDisplay(current, total) {
+    const fmt = s => { const m=Math.floor(s/60),sc=Math.floor(s%60); return `${m}:${String(sc).padStart(2,'0')}`; };
+    const ct = document.getElementById('current-time');
+    const tt = document.getElementById('total-time');
+    if (ct) ct.textContent = fmt(current || 0);
+    if (tt && total) tt.textContent = fmt(total);
+}
+
+// ── Error display ─────────────────────────────────────────────────────────────
+function showMixerError(msg) {
+    const container = document.querySelector('.container');
+    if (container) {
+        container.insertAdjacentHTML('afterbegin', `
+          <div class="alert alert-error" style="margin-top:1rem;">
+            <i class="fas fa-exclamation-circle"></i> ${msg}
+          </div>`);
+    }
+    console.error('[Mixer]', msg);
+}
+
+// ── Toast notifications ───────────────────────────────────────────────────────
+function showToast(msg, type = 'info') {
+    const colors = { success:'#10b981', error:'#ef4444', info:'#6366f1' };
+    const icons  = { success:'fa-check-circle', error:'fa-exclamation-circle', info:'fa-info-circle' };
+    const toast  = document.createElement('div');
+    toast.style.cssText = `
+        position:fixed; bottom:1.5rem; right:1.5rem; z-index:9999;
+        background:${colors[type]||colors.info}; color:#fff;
+        padding:.75rem 1.25rem; border-radius:.75rem;
+        box-shadow:0 4px 12px rgba(0,0,0,.4);
+        display:flex; align-items:center; gap:.6rem;
+        font-size:.9rem; max-width:320px;
+        animation: slideInToast .25s ease;
+    `;
+    toast.innerHTML = `<i class="fas ${icons[type]||icons.info}"></i><span>${msg}</span>`;
+    if (!document.getElementById('toast-anim')) {
+        const s = document.createElement('style');
+        s.id = 'toast-anim';
+        s.textContent = '@keyframes slideInToast{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}';
+        document.head.appendChild(s);
+    }
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+}
+
+// ── WAV encoder (PCM float32 → WAV blob) ─────────────────────────────────────
+function audioBufferToWav(buffer) {
+    const numCh   = buffer.numberOfChannels;
+    const sr      = buffer.sampleRate;
+    const numSamp = buffer.length;
+    const byteLen = 44 + numSamp * numCh * 2;
+    const ab      = new ArrayBuffer(byteLen);
+    const view    = new DataView(ab);
+
+    const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+    writeStr(0, 'RIFF');
+    view.setUint32(4,  byteLen - 8, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16,       true);
+    view.setUint16(20, 1,        true);   // PCM
+    view.setUint16(22, numCh,    true);
+    view.setUint32(24, sr,       true);
+    view.setUint32(28, sr * numCh * 2, true);
+    view.setUint16(32, numCh * 2, true);
+    view.setUint16(34, 16,        true);  // 16-bit
+    writeStr(36, 'data');
+    view.setUint32(40, numSamp * numCh * 2, true);
+
+    // Interleave channels
+    let offset = 44;
+    for (let i = 0; i < numSamp; i++) {
+        for (let ch = 0; ch < numCh; ch++) {
+            const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+            offset += 2;
+        }
+    }
+    return new Blob([ab], { type: 'audio/wav' });
+}
+
+document.addEventListener('DOMContentLoaded', initMixer);
+</script>
+{% endblock %}

@@ -1,0 +1,31 @@
+<section class="upload-section" id="upload-section">
+    <div class="upload-container">
+        <!-- File Upload -->
+        <form id="upload-form" enctype="multipart/form-data" method="POST" action="/upload">
+            <div class="upload-area" id="upload-area">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <h3>Drag & Drop your audio file here</h3>
+                <p>or</p>
+                <label for="file-input" class="btn btn-primary">
+                    <i class="fas fa-folder-open"></i> Browse Files
+                </label>
+                <input type="file" id="file-input" name="file" accept="audio/*" hidden>
+                <p class="file-info">Supported formats: MP3, WAV, FLAC, OGG (Max 50MB)</p>
+                <p class="file-info"><strong>Model:</strong> HT-Demucs (Best Quality)</p>
+            </div>
+            <div class="selected-file" id="selected-file" style="display: none;">
+                <i class="fas fa-file-audio"></i>
+                <span class="file-name"></span>
+                <button type="button" class="btn-remove">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <button type="submit" class="btn btn-primary btn-submit">
+                <i class="fas fa-magic"></i> Separate Stems with AI
+            </button>
+        </form>
+    </div>
+</section>
+
+<!-- Event listeners are handled by script.js initUploadFeatures() -->
+

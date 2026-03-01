@@ -1,0 +1,114 @@
+<section class="projects-section" id="projects-section">
+    <div class="projects-container">
+        <div class="projects-header">
+            <h3><i class="fas fa-folder-open"></i> My Projects</h3>
+            <div class="projects-actions">
+                <button class="btn btn-primary" id="new-project-btn">
+                    <i class="fas fa-plus"></i> New Project
+                </button>
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="project-search" placeholder="Search projects...">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Filter & Sort -->
+        <div class="projects-filters">
+            <div class="filter-group">
+                <label>Sort by:</label>
+                <select id="project-sort">
+                    <option value="recent">Most Recent</option>
+                    <option value="name">Name (A-Z)</option>
+                    <option value="size">Size</option>
+                    <option value="rating">Rating</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label>Filter:</label>
+                <select id="project-filter">
+                    <option value="all">All Projects</option>
+                    <option value="completed">Completed</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="favorites">Favorites</option>
+                </select>
+            </div>
+            
+            <div class="view-toggle">
+                <button class="view-btn active" data-view="grid" title="Grid View">
+                    <i class="fas fa-th"></i>
+                </button>
+                <button class="view-btn" data-view="list" title="List View">
+                    <i class="fas fa-list"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Projects Grid -->
+        <div class="projects-grid" id="projects-grid">
+            <!-- Project Card Example -->
+            <div class="project-card sample">
+                <div class="project-thumbnail">
+                    <img src="https://via.placeholder.com/300x200?text=Sample+Project" alt="Project">
+                    <div class="project-overlay">
+                        <button class="btn-play">
+                            <i class="fas fa-play"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="project-info">
+                    <h4 class="project-title">Sample Project</h4>
+                    <p class="project-artist">Artist Name - Song Title</p>
+                    <div class="project-meta">
+                        <span><i class="fas fa-clock"></i> 3:45</span>
+                        <span><i class="fas fa-calendar"></i> Today</span>
+                    </div>
+                    <div class="project-tags">
+                        <span class="tag">Pop</span>
+                        <span class="tag">4 stems</span>
+                    </div>
+                    <div class="project-score">
+                        <i class="fas fa-star"></i>
+                        <span>85/100</span>
+                    </div>
+                </div>
+                <div class="project-actions">
+                    <button class="btn-icon" title="Open">
+                        <i class="fas fa-folder-open"></i>
+                    </button>
+                    <button class="btn-icon favorite-btn" title="Favorite">
+                        <i class="far fa-heart"></i>
+                    </button>
+                    <button class="btn-icon" title="Share">
+                        <i class="fas fa-share"></i>
+                    </button>
+                    <button class="btn-icon" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Empty State -->
+            <div class="projects-empty" id="projects-empty">
+                <i class="fas fa-folder-open"></i>
+                <h4>No Projects Yet</h4>
+                <p>Start by uploading a song to create your first karaoke project</p>
+                <button class="btn btn-primary" onclick="document.getElementById('upload-section').scrollIntoView({behavior: 'smooth'})">
+                    <i class="fas fa-plus"></i> Create Project
+                </button>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        <div class="projects-pagination" id="projects-pagination" style="display: none;">
+            <button class="btn btn-secondary" id="prev-page">
+                <i class="fas fa-chevron-left"></i> Previous
+            </button>
+            <span class="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
+            <button class="btn btn-secondary" id="next-page">
+                Next <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+</section>

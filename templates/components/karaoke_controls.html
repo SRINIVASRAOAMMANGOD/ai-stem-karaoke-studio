@@ -1,0 +1,120 @@
+<section class="karaoke-controls-section" id="karaoke-controls-section" style="display: none;">
+    <div class="karaoke-controls-container">
+        <h3><i class="fas fa-microphone-alt"></i> Karaoke Mode</h3>
+        
+        <div class="karaoke-mode-toggle">
+            <label class="switch">
+                <input type="checkbox" id="karaoke-mode-toggle">
+                <span class="slider"></span>
+            </label>
+            <span>Enable Karaoke Mode</span>
+        </div>
+        
+        <div class="karaoke-content" id="karaoke-content" style="display: none;">
+            <!-- Lyrics Display -->
+            <div class="lyrics-container">
+                <div class="lyrics-header">
+                    <h4><i class="fas fa-align-left"></i> Lyrics</h4>
+                    <div class="lyrics-controls">
+                        <button class="btn-icon" id="edit-lyrics" title="Edit Lyrics">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-icon" id="import-lyrics" title="Import Lyrics">
+                            <i class="fas fa-file-import"></i>
+                        </button>
+                        <select id="lyrics-font-size">
+                            <option value="small">Small</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="large">Large</option>
+                            <option value="xlarge">Extra Large</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="lyrics-display" id="lyrics-display">
+                    <div class="lyrics-placeholder">
+                        <i class="fas fa-music"></i>
+                        <p>No lyrics available</p>
+                        <button class="btn btn-primary" id="add-lyrics-btn">
+                            <i class="fas fa-plus"></i> Add Lyrics
+                        </button>
+                    </div>
+                </div>
+                
+                <textarea class="lyrics-editor" id="lyrics-editor" style="display: none;" placeholder="Enter lyrics here... Use [00:00.00] for timestamps"></textarea>
+            </div>
+            
+            <!-- Vocal Enhancement -->
+            <div class="vocal-enhancement">
+                <h4><i class="fas fa-magic"></i> Vocal Enhancement</h4>
+                <div class="enhancement-controls">
+                    <div class="control-group">
+                        <label>Reverb</label>
+                        <input type="range" id="reverb-slider" min="0" max="100" value="20">
+                        <span class="control-value">20%</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Echo</label>
+                        <input type="range" id="echo-slider" min="0" max="100" value="10">
+                        <span class="control-value">10%</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Auto-Tune</label>
+                        <input type="range" id="autotune-slider" min="0" max="100" value="0">
+                        <span class="control-value">Off</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Karaoke Settings -->
+            <div class="karaoke-settings">
+                <h4><i class="fas fa-cog"></i> Karaoke Settings</h4>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="show-background-vocals" checked>
+                            Show Background Vocals
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="highlight-active-line" checked>
+                            Highlight Active Line
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="auto-scroll" checked>
+                            Auto-scroll Lyrics
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="karaoke-countdown">
+                            Countdown Before Start
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Presets -->
+            <div class="karaoke-presets">
+                <h4><i class="fas fa-star"></i> Quick Presets</h4>
+                <div class="presets-buttons">
+                    <button class="btn btn-secondary preset-btn" data-preset="classic">
+                        <i class="fas fa-music"></i> Classic
+                    </button>
+                    <button class="btn btn-secondary preset-btn" data-preset="concert">
+                        <i class="fas fa-guitar"></i> Concert Hall
+                    </button>
+                    <button class="btn btn-secondary preset-btn" data-preset="studio">
+                        <i class="fas fa-microphone"></i> Studio
+                    </button>
+                    <button class="btn btn-secondary preset-btn" data-preset="custom">
+                        <i class="fas fa-sliders-h"></i> Custom
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

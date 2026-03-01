@@ -1,0 +1,124 @@
+<section class="comparison-section" id="comparison-section" style="display: none;">
+    <div class="comparison-container">
+        <h3><i class="fas fa-compress-arrows-alt"></i> Compare Your Performance</h3>
+        
+        <div class="comparison-toggle">
+            <button class="btn btn-primary" id="start-comparison-btn">
+                <i class="fas fa-play"></i> Start Comparison
+            </button>
+        </div>
+        
+        <div class="comparison-content" id="comparison-content" style="display: none;">
+            <!-- Dual Waveform View -->
+            <div class="dual-waveform">
+                <div class="waveform-panel">
+                    <h4>Original Vocals</h4>
+                    <div id="comparison-wave-original" class="comparison-wave"></div>
+                    <button class="btn btn-secondary btn-sm play-original">
+                        <i class="fas fa-play"></i> Play Original
+                    </button>
+                </div>
+                
+                <div class="waveform-panel">
+                    <h4>Your Recording</h4>
+                    <div id="comparison-wave-recording" class="comparison-wave"></div>
+                    <button class="btn btn-secondary btn-sm play-recording">
+                        <i class="fas fa-play"></i> Play Recording
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Playback Controls -->
+            <div class="comparison-controls">
+                <div class="playback-mode">
+                    <label>Playback Mode:</label>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary active" data-mode="original">
+                            Original Only
+                        </button>
+                        <button class="btn btn-secondary" data-mode="recording">
+                            Recording Only
+                        </button>
+                        <button class="btn btn-secondary" data-mode="both">
+                            Play Both
+                        </button>
+                        <button class="btn btn-secondary" data-mode="switch">
+                            A/B Switch
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="playback-actions">
+                    <button class="btn-control" id="comp-play-btn">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn-control" id="comp-pause-btn">
+                        <i class="fas fa-pause"></i>
+                    </button>
+                    <button class="btn-control" id="comp-stop-btn">
+                        <i class="fas fa-stop"></i>
+                    </button>
+                    <button class="btn-control" id="comp-sync-btn" title="Sync Playback">
+                        <i class="fas fa-link"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Spectral Analysis -->
+            <div class="spectral-analysis">
+                <h4><i class="fas fa-chart-line"></i> Spectral Analysis</h4>
+                <div class="spectral-grid">
+                    <div class="spectral-panel">
+                        <label>Original</label>
+                        <canvas id="spectrogram-original"></canvas>
+                    </div>
+                    <div class="spectral-panel">
+                        <label>Recording</label>
+                        <canvas id="spectrogram-recording"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pitch Comparison -->
+            <div class="pitch-comparison">
+                <h4><i class="fas fa-music"></i> Pitch Comparison</h4>
+                <div class="pitch-chart">
+                    <canvas id="pitch-comparison-chart"></canvas>
+                </div>
+                <div class="pitch-stats">
+                    <div class="stat-item">
+                        <label>Pitch Accuracy</label>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="pitch-accuracy" style="width: 0%"></div>
+                        </div>
+                        <span class="stat-value">0%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Timing Analysis -->
+            <div class="timing-analysis">
+                <h4><i class="fas fa-clock"></i> Timing Analysis</h4>
+                <div class="timing-chart">
+                    <canvas id="timing-comparison-chart"></canvas>
+                </div>
+                <div class="timing-stats">
+                    <div class="stat-item">
+                        <label>Timing Accuracy</label>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="timing-accuracy" style="width: 0%"></div>
+                        </div>
+                        <span class="stat-value">0%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Export Comparison -->
+            <div class="comparison-export">
+                <button class="btn btn-primary" id="export-comparison-btn">
+                    <i class="fas fa-file-export"></i> Export Comparison Report
+                </button>
+            </div>
+        </div>
+    </div>
+</section>

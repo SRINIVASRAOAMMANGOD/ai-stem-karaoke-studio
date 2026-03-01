@@ -1,0 +1,169 @@
+<section class="ai-score-section" id="ai-score-section" style="display: none;">
+    <div class="ai-score-container">
+        <h3><i class="fas fa-robot"></i> AI Performance Analysis</h3>
+        
+        <!-- Overall Score -->
+        <div class="overall-score">
+            <div class="score-circle">
+                <svg viewBox="0 0 200 200">
+                    <circle class="score-bg" cx="100" cy="100" r="90"></circle>
+                    <circle class="score-fill" cx="100" cy="100" r="90" id="score-circle"></circle>
+                </svg>
+                <div class="score-text">
+                    <span class="score-value" id="overall-score">0</span>
+                    <span class="score-max">/100</span>
+                </div>
+            </div>
+            <p class="score-label">Overall Performance Score</p>
+            <p class="score-rating" id="score-rating">Not yet analyzed</p>
+        </div>
+        
+        <!-- Detailed Metrics -->
+        <div class="metrics-grid">
+            <!-- Pitch Accuracy -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <i class="fas fa-music"></i>
+                    <h4>Pitch Accuracy</h4>
+                </div>
+                <div class="metric-score">
+                    <span class="metric-value" id="pitch-score">0</span>
+                    <span class="metric-max">/100</span>
+                </div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="pitch-fill" style="width: 0%"></div>
+                </div>
+                <p class="metric-feedback" id="pitch-feedback">-</p>
+            </div>
+            
+            <!-- Timing -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <i class="fas fa-clock"></i>
+                    <h4>Timing</h4>
+                </div>
+                <div class="metric-score">
+                    <span class="metric-value" id="timing-score">0</span>
+                    <span class="metric-max">/100</span>
+                </div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="timing-fill" style="width: 0%"></div>
+                </div>
+                <p class="metric-feedback" id="timing-feedback">-</p>
+            </div>
+            
+            <!-- Tone Quality -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <i class="fas fa-volume-up"></i>
+                    <h4>Tone Quality</h4>
+                </div>
+                <div class="metric-score">
+                    <span class="metric-value" id="tone-score">0</span>
+                    <span class="metric-max">/100</span>
+                </div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="tone-fill" style="width: 0%"></div>
+                </div>
+                <p class="metric-feedback" id="tone-feedback">-</p>
+            </div>
+            
+            <!-- Expression -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <i class="fas fa-heart"></i>
+                    <h4>Expression</h4>
+                </div>
+                <div class="metric-score">
+                    <span class="metric-value" id="expression-score">0</span>
+                    <span class="metric-max">/100</span>
+                </div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="expression-fill" style="width: 0%"></div>
+                </div>
+                <p class="metric-feedback" id="expression-feedback">-</p>
+            </div>
+            
+            <!-- Consistency -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <i class="fas fa-chart-line"></i>
+                    <h4>Consistency</h4>
+                </div>
+                <div class="metric-score">
+                    <span class="metric-value" id="consistency-score">0</span>
+                    <span class="metric-max">/100</span>
+                </div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="consistency-fill" style="width: 0%"></div>
+                </div>
+                <p class="metric-feedback" id="consistency-feedback">-</p>
+            </div>
+            
+            <!-- Breath Control -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <i class="fas fa-wind"></i>
+                    <h4>Breath Control</h4>
+                </div>
+                <div class="metric-score">
+                    <span class="metric-value" id="breath-score">0</span>
+                    <span class="metric-max">/100</span>
+                </div>
+                <div class="metric-bar">
+                    <div class="metric-fill" id="breath-fill" style="width: 0%"></div>
+                </div>
+                <p class="metric-feedback" id="breath-feedback">-</p>
+            </div>
+        </div>
+        
+        <!-- AI Insights -->
+        <div class="ai-insights">
+            <h4><i class="fas fa-lightbulb"></i> AI Insights & Suggestions</h4>
+            <div class="insights-content" id="ai-insights-content">
+                <div class="insight-placeholder">
+                    <i class="fas fa-robot"></i>
+                    <p>Record your performance to get AI-powered feedback</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Strengths & Areas to Improve -->
+        <div class="feedback-sections">
+            <div class="feedback-section strengths">
+                <h4><i class="fas fa-star"></i> Strengths</h4>
+                <ul id="strengths-list">
+                    <li class="placeholder">No data yet</li>
+                </ul>
+            </div>
+            
+            <div class="feedback-section improvements">
+                <h4><i class="fas fa-exclamation-triangle"></i> Areas to Improve</h4>
+                <ul id="improvements-list">
+                    <li class="placeholder">No data yet</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Progress Tracking -->
+        <div class="progress-tracking">
+            <h4><i class="fas fa-chart-bar"></i> Progress Over Time</h4>
+            <div class="progress-chart">
+                <canvas id="progress-chart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="ai-score-actions">
+            <button class="btn btn-primary" id="analyze-performance-btn">
+                <i class="fas fa-robot"></i> Analyze Performance
+            </button>
+            <button class="btn btn-secondary" id="share-score-btn">
+                <i class="fas fa-share"></i> Share Score
+            </button>
+            <button class="btn btn-secondary" id="download-report-btn">
+                <i class="fas fa-download"></i> Download Report
+            </button>
+        </div>
+    </div>
+</section>

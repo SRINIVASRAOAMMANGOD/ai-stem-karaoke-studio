@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+
+{% block title %}My Projects{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- ── Page Header ── -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2><i class="fas fa-folder-open"></i> My Projects</h2>
+      {% if projects %}
+      <div class="projects-stats-row">
+        <span class="stat-chip"><i class="fas fa-layer-group"></i> {{ projects|length }} project{{ 's' if projects|length != 1 }}</span>
+        {% set recorded = projects | selectattr('has_recording') | list %}
+        {% if recorded %}
+        <span class="stat-chip recorded"><i class="fas fa-microphone"></i> {{ recorded|length }} recorded</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="actions">
+      <a href="{{ url_for('index') }}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> New Project
+      </a>
+    </div>
+  </div>
+
+  <!-- ── Toolbar ── -->
+  <div class="projects-toolbar">
+    <div class="search-box">
+      <i class="fas fa-search"></i>
+      <input type="text" id="project-search" placeholder="Search projects…" autocomplete="off">
+      <button class="search-clear" id="search-clear" style="display:none;" title="Clear"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="toolbar-right">
+      <select id="project-sort" class="toolbar-select">
+        <option value="recent">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="name">Name A–Z</option>
+        <option value="score">Top score</option>
+      </select>
+
+      <div class="view-toggle-btns">
+        <button class="view-toggle-btn active" id="view-grid" title="Grid view"><i class="fas fa-th-large"></i></button>
+        <button class="view-toggle-btn" id="view-list" title="List view"><i class="fas fa-list"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Grid ── -->
+  <div class="projects-grid" id="projects-grid">
+    {% if projects %}
+      {% for project in projects %}
+      {# Compute stem count from stems dict if present #}
+      {% set stems = project.stems if project.stems is defined else {} %}
+      {% set stem_count = stems | length %}
+      {# Pick accent colour per index #}
+      {% set colours = ['#6366f1','#8b5cf6','#ec4899','#10b981','#f59e0b','#3b82f6'] %}
+      {% set colour = colours[loop.index0 % colours|length] %}
+
+      <div class="project-card" 
+           data-name="{{ project.name | lower }}"
+           data-date="{{ project.created_at }}"
+           data-score="{{ project.score or 0 }}">
+
+        <!-- Thumbnail -->
+        <a href="{{ url_for('mixer', project_id=project.id) }}" class="project-thumb" style="--card-color:{{ colour }};">
+          <div class="project-thumb-bg">
+            <!-- Fake waveform bars -->
+            {% for i in range(24) %}
+            <span class="wb"></span>
+            {% endfor %}
+          </div>
+          <div class="project-thumb-icon"><i class="fas fa-music"></i></div>
+          <div class="project-thumb-overlay">
+            <span class="btn-play-circle"><i class="fas fa-play"></i></span>
+          </div>
+          {% if project.has_recording %}
+          <span class="thumb-badge recorded-badge"><i class="fas fa-microphone"></i> Recorded</span>
+          {% endif %}
+        </a>
+
+        <!-- Info -->
+        <div class="project-info">
+          <h4 class="project-title" title="{{ project.name }}">{{ project.name }}</h4>
+
+          <div class="project-meta-row">
+            <span class="pmeta"><i class="fas fa-calendar-alt"></i> {{ project.created_at[:10] }}</span>
+            <span class="pmeta model-badge">{{ project.model }}</span>
+          </div>
+
+          {% if stem_count %}
+          <div class="stem-badges">
+            {% for stem_name in stems %}
+            <span class="stem-badge">{{ stem_name }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if project.score %}
+          <div class="project-score-bar">
+            <div class="score-fill" style="width:{{ project.score }}%;background:{{ colour }};"></div>
+            <span class="score-label"><i class="fas fa-star"></i> {{ project.score }}/100</span>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Actions footer -->
+        <div class="project-actions-footer">
+          <a href="{{ url_for('mixer', project_id=project.id) }}" class="paction-btn" title="Open Mixer">
+            <i class="fas fa-sliders-h"></i><span>Mixer</span>
+          </a>
+          <a href="{{ url_for('karaoke', project_id=project.id) }}" class="paction-btn" title="Karaoke">
+            <i class="fas fa-microphone-alt"></i><span>Karaoke</span>
+          </a>
+          {% if project.has_recording %}
+          <a href="{{ url_for('compare', project_id=project.id) }}" class="paction-btn" title="Compare">
+            <i class="fas fa-compress-arrows-alt"></i><span>Compare</span>
+          </a>
+          {% endif %}
+          <button class="paction-btn paction-delete" data-id="{{ project.id }}" data-name="{{ project.name }}" title="Delete">
+            <i class="fas fa-trash-alt"></i><span>Delete</span>
+          </button>
+        </div>
+
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    <!-- Empty state (always present, shown via JS when no results) -->
+    <div class="projects-empty" id="projects-empty" {% if projects %}style="display:none;"{% endif %}>
+      <div class="empty-icon"><i class="fas fa-compact-disc"></i></div>
+      <h4>{% if projects %}No matching projects{% else %}No Projects Yet{% endif %}</h4>
+      <p>{% if projects %}Try a different search term{% else %}Upload a song to get started{% endif %}</p>
+      <a href="{{ url_for('index') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Create Project</a>
+    </div>
+  </div><!-- /projects-grid -->
+
+</div><!-- /container -->
+
+<!-- ── Delete Modal ── -->
+<div class="modal-backdrop" id="delete-modal" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-icon"><i class="fas fa-exclamation-triangle"></i></div>
+    <h3>Delete Project?</h3>
+    <p id="delete-modal-name" class="modal-subtext"></p>
+    <p class="modal-warning">This will permanently remove all stems and recordings. This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="delete-cancel">Cancel</button>
+      <button class="btn btn-danger" id="delete-confirm"><i class="fas fa-trash-alt"></i> Delete</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  initProjects();
+});
+
+function initProjects() {
+  const grid      = document.getElementById('projects-grid');
+  const allCards  = () => [...grid.querySelectorAll('.project-card')];
+  const emptyEl   = document.getElementById('projects-empty');
+  const searchEl  = document.getElementById('project-search');
+  const clearBtn  = document.getElementById('search-clear');
+  const sortEl    = document.getElementById('project-sort');
+  const gridBtn   = document.getElementById('view-grid');
+  const listBtn   = document.getElementById('view-list');
+
+  /* ── Search ── */
+  searchEl.addEventListener('input', () => {
+    clearBtn.style.display = searchEl.value ? '' : 'none';
+    applyFilters();
+  });
+  clearBtn.addEventListener('click', () => {
+    searchEl.value = '';
+    clearBtn.style.display = 'none';
+    applyFilters();
+  });
+
+  /* ── Sort ── */
+  sortEl.addEventListener('change', applyFilters);
+
+  /* ── View toggle ── */
+  gridBtn.addEventListener('click', () => setView('grid'));
+  listBtn.addEventListener('click', () => setView('list'));
+
+  function setView(mode) {
+    grid.classList.toggle('list-view', mode === 'list');
+    gridBtn.classList.toggle('active', mode === 'grid');
+    listBtn.classList.toggle('active', mode === 'list');
+    localStorage.setItem('projects_view', mode);
+  }
+  // Restore saved view
+  const saved = localStorage.getItem('projects_view');
+  if (saved === 'list') setView('list');
+
+  /* ── Filter + Sort ── */
+  function applyFilters() {
+    const q = searchEl.value.toLowerCase().trim();
+    let cards = allCards();
+
+    // Filter by name
+    cards.forEach(c => {
+      const name = c.dataset.name || '';
+      c.style.display = name.includes(q) ? '' : 'none';
+    });
+
+    // Sort visible cards
+    const visible = cards.filter(c => c.style.display !== 'none');
+    const sortVal = sortEl.value;
+    visible.sort((a, b) => {
+      if (sortVal === 'name')   return a.dataset.name.localeCompare(b.dataset.name);
+      if (sortVal === 'score')  return (+b.dataset.score) - (+a.dataset.score);
+      if (sortVal === 'oldest') return a.dataset.date.localeCompare(b.dataset.date);
+      return b.dataset.date.localeCompare(a.dataset.date); // recent
+    });
+    visible.forEach(c => grid.appendChild(c));
+    grid.appendChild(emptyEl); // keep empty state at end
+
+    // Show empty state if nothing visible
+    emptyEl.style.display = visible.length === 0 ? '' : 'none';
+    if (emptyEl.style.display !== 'none') {
+      emptyEl.querySelector('h4').textContent = q ? 'No matching projects' : 'No Projects Yet';
+      emptyEl.querySelector('p').textContent  = q ? 'Try a different search term' : 'Upload a song to get started';
+    }
+  }
+
+  /* ── Delete modal ── */
+  let pendingDeleteId = null;
+  const modal     = document.getElementById('delete-modal');
+  const modalName = document.getElementById('delete-modal-name');
+  const cancelBtn = document.getElementById('delete-cancel');
+  const confirmBtn= document.getElementById('delete-confirm');
+
+  grid.addEventListener('click', e => {
+    const btn = e.target.closest('.paction-delete');
+    if (!btn) return;
+    pendingDeleteId = btn.dataset.id;
+    modalName.textContent = '"' + btn.dataset.name + '"';
+    modal.style.display = 'flex';
+  });
+  cancelBtn.addEventListener('click', () => { modal.style.display = 'none'; pendingDeleteId = null; });
+  modal.addEventListener('click', e => { if (e.target === modal) { modal.style.display='none'; pendingDeleteId=null; } });
+
+  confirmBtn.addEventListener('click', async () => {
+    if (!pendingDeleteId) return;
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+    try {
+      const resp = await fetch(`/api/projects/${pendingDeleteId}`, { method: 'DELETE' });
+      const data = await resp.json();
+      modal.style.display = 'none';
+      if (data.success) {
+        const card = grid.querySelector(`.paction-delete[data-id="${pendingDeleteId}"]`)?.closest('.project-card');
+        if (card) {
+          card.style.transition = 'all .35s ease';
+          card.style.opacity = '0';
+          card.style.transform = 'scale(.92)';
+          setTimeout(() => { card.remove(); applyFilters(); }, 360);
+        }
+        showToast('Project deleted', 'success');
+      } else {
+        showToast('Delete failed: ' + (data.error||'unknown'), 'error');
+      }
+    } catch(err) {
+      showToast('Error: ' + err.message, 'error');
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Delete';
+      pendingDeleteId = null;
+    }
+  });
+}
+
+function showToast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 350); }, 2800);
+}
+</script>
+{% endblock %}

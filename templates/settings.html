@@ -1,0 +1,578 @@
+{% extends 'base.html' %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2><i class="fas fa-cog"></i> Settings</h2>
+    </div>
+
+    <section class="settings-section">
+        <div class="settings-tabs">
+            <button class="settings-tab active" data-tab="audio">
+                <i class="fas fa-volume-up"></i> Audio
+            </button>
+            <button class="settings-tab" data-tab="processing">
+                <i class="fas fa-microchip"></i> Processing
+            </button>
+            <button class="settings-tab" data-tab="appearance">
+                <i class="fas fa-palette"></i> Appearance
+            </button>
+            <button class="settings-tab" data-tab="storage">
+                <i class="fas fa-database"></i> Storage
+            </button>
+            <button class="settings-tab" data-tab="advanced">
+                <i class="fas fa-wrench"></i> Advanced
+            </button>
+        </div>
+
+        <div class="settings-content">
+
+            <!-- ── Audio ─────────────────────────────────────── -->
+            <div class="settings-panel active" id="audio-settings">
+                <h4>Audio Settings</h4>
+
+                <div class="setting-group">
+                    <label>Audio Output Device</label>
+                    <select id="audio-output"><option value="default">System Default</option></select>
+                    <p class="setting-help">Choose which speaker / headphone output to use for playback.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label>Audio Input Device (Microphone)</label>
+                    <select id="audio-input"><option value="default">System Default</option></select>
+                    <p class="setting-help">Choose which microphone to use for karaoke recording.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label>Sample Rate</label>
+                    <select id="sample-rate">
+                        <option value="44100">44.1 kHz (CD Quality)</option>
+                        <option value="48000">48 kHz (Studio Standard)</option>
+                        <option value="96000">96 kHz (High Quality)</option>
+                    </select>
+                    <p class="setting-help">Higher rates improve audio fidelity in exported mixes.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label>Buffer Size</label>
+                    <select id="buffer-size">
+                        <option value="128">128 samples (Low Latency)</option>
+                        <option value="256">256 samples (Balanced)</option>
+                        <option value="512">512 samples (Stable)</option>
+                        <option value="1024">1024 samples (High Stability)</option>
+                    </select>
+                    <p class="setting-help">Lower values reduce latency but may cause audio glitches on slow machines.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="normalize-audio">
+                        Normalize audio levels on export
+                    </label>
+                </div>
+            </div>
+
+            <!-- ── Processing ────────────────────────────────── -->
+            <div class="settings-panel" id="processing-settings">
+                <h4>Processing Settings</h4>
+
+                <div class="setting-group">
+                    <label>Default Separation Model</label>
+                    <select id="default-model">
+                        <option value="htdemucs">HT-Demucs (Best Quality)</option>
+                        <option value="htdemucs_ft">HT-Demucs Fine-tuned</option>
+                        <option value="htdemucs_6s">HT-Demucs 6-Stems</option>
+                        <option value="mdx_extra">MDX Extra</option>
+                    </select>
+                    <p class="setting-help">This model will be used automatically when you upload a new track.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label>Processing Quality</label>
+                    <select id="processing-quality">
+                        <option value="fast">Fast (Lower Quality)</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="best">Best (Slower)</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label>CPU Threads</label>
+                    <input type="number" id="cpu-threads" min="1" max="32" value="4" style="width:100px;">
+                    <p class="setting-help">Number of CPU threads for stem separation. Recommended: number of physical cores.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="use-gpu">
+                        Use GPU acceleration (CUDA) when available
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <label>Export Format (for stem downloads)</label>
+                    <select id="export-format">
+                        <option value="wav">WAV (Lossless)</option>
+                        <option value="flac">FLAC (Lossless Compressed)</option>
+                        <option value="mp3">MP3 (320 kbps)</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="auto-cleanup">
+                        Automatically clean up temporary files after processing
+                    </label>
+                </div>
+            </div>
+
+            <!-- ── Appearance ────────────────────────────────── -->
+            <div class="settings-panel" id="appearance-settings">
+                <h4>Appearance Settings</h4>
+
+                <div class="setting-group">
+                    <label>Theme</label>
+                    <select id="theme">
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                        <option value="auto">Auto (Follow System)</option>
+                    </select>
+                    <p class="setting-help">Changes take effect immediately.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label>Accent Color</label>
+                    <div style="display:flex;align-items:center;gap:1rem;">
+                        <input type="color" id="accent-color" value="#6366f1" style="width:56px;height:40px;cursor:pointer;border-radius:8px;border:none;">
+                        <span id="accent-hex" style="font-family:monospace;color:var(--text-secondary);">#6366f1</span>
+                        <button class="btn btn-secondary btn-sm" id="accent-reset-btn">Reset</button>
+                    </div>
+                    <p class="setting-help">Changes the highlight color throughout the app.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label>Waveform Color Scheme</label>
+                    <select id="waveform-colors">
+                        <option value="default">Default (Purple)</option>
+                        <option value="vibrant">Vibrant (Rainbow)</option>
+                        <option value="pastel">Pastel</option>
+                        <option value="monochrome">Monochrome</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-animations">
+                        Enable transition animations
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="compact-mode">
+                        Compact mode (tighter spacing)
+                    </label>
+                </div>
+            </div>
+
+            <!-- ── Storage ───────────────────────────────────── -->
+            <div class="settings-panel" id="storage-settings">
+                <h4>Storage Settings</h4>
+
+                <div class="setting-group" id="storage-info-group">
+                    <label>Disk Usage (Projects Folder)</label>
+                    <div class="storage-bar" style="height:12px;background:var(--bg-primary);border-radius:999px;overflow:hidden;margin:6px 0;">
+                        <div id="storage-fill" style="height:100%;width:0%;background:var(--primary-color);transition:width .5s;"></div>
+                    </div>
+                    <span id="storage-label" style="color:var(--text-secondary);font-size:.875rem;">Loading…</span>
+                </div>
+
+                <div class="setting-group">
+                    <label>Maximum Storage Budget</label>
+                    <select id="max-storage">
+                        <option value="500">500 MB</option>
+                        <option value="1000">1 GB</option>
+                        <option value="5000">5 GB</option>
+                        <option value="unlimited">Unlimited</option>
+                    </select>
+                    <p class="setting-help">Informational only — a warning will appear when you exceed this.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="auto-delete-old">
+                        Warn me about projects older than 30 days
+                    </label>
+                </div>
+
+                <div class="setting-group" style="display:flex;gap:.75rem;flex-wrap:wrap;">
+                    <button class="btn btn-secondary" id="clear-cache-btn">
+                        <i class="fas fa-trash"></i> Clear Cache &amp; Temp Files
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Advanced ──────────────────────────────────── -->
+            <div class="settings-panel" id="advanced-settings">
+                <h4>Advanced Settings</h4>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enable-debug">
+                        Enable debug logging in terminal
+                    </label>
+                </div>
+
+                <div class="setting-group">
+                    <label>API Endpoint</label>
+                    <input type="text" id="api-endpoint" value="http://localhost:5000" placeholder="http://localhost:5000" style="width:100%;max-width:360px;">
+                    <p class="setting-help">Only change this if you are running the server on a different host/port.</p>
+                </div>
+
+                <div class="setting-group">
+                    <label>Export / Import Configuration</label>
+                    <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+                        <button class="btn btn-secondary" id="export-settings-btn">
+                            <i class="fas fa-file-export"></i> Export Settings JSON
+                        </button>
+                        <label class="btn btn-secondary" style="cursor:pointer;margin:0;">
+                            <i class="fas fa-file-import"></i> Import Settings JSON
+                            <input type="file" id="import-settings-input" accept=".json" style="display:none;">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /.settings-content -->
+
+        <div class="settings-footer">
+            <button class="btn btn-primary" id="save-settings-btn">
+                <i class="fas fa-save"></i> Save Settings
+            </button>
+            <button class="btn btn-secondary" id="reset-settings-btn">
+                <i class="fas fa-undo"></i> Reset to Defaults
+            </button>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+'use strict';
+
+const DEFAULT_SETTINGS = {
+    audio_output:        'default',
+    audio_input:         'default',
+    sample_rate:         '48000',
+    buffer_size:         '512',
+    normalize_audio:     true,
+    default_model:       'htdemucs',
+    processing_quality:  'balanced',
+    cpu_threads:         4,
+    use_gpu:             true,
+    auto_cleanup:        true,
+    theme:               'dark',
+    accent_color:        '#6366f1',
+    waveform_colors:     'default',
+    show_animations:     true,
+    compact_mode:        false,
+    max_storage:         '1000',
+    auto_delete_old:     false,
+    export_format:       'wav',
+    enable_debug:        false,
+    api_endpoint:        'http://localhost:5000',
+};
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+function val(id)       { return document.getElementById(id)?.value; }
+function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
+function chk(id)       { return document.getElementById(id)?.checked; }
+function setChk(id, v) { const el = document.getElementById(id); if (el) el.checked = !!v; }
+
+function showToast(msg, type = 'info') {
+    const c = {success:'#10b981', error:'#ef4444', info:'#6366f1'};
+    const i = {success:'fa-check-circle', error:'fa-exclamation-circle', info:'fa-info-circle'};
+    const t = document.createElement('div');
+    t.style.cssText = `position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
+        background:${c[type]||c.info};color:#fff;padding:.75rem 1.25rem;
+        border-radius:.75rem;box-shadow:0 4px 12px rgba(0,0,0,.4);
+        display:flex;align-items:center;gap:.6rem;font-size:.9rem;max-width:320px;`;
+    t.innerHTML = `<i class="fas ${i[type]||i.info}"></i><span>${msg}</span>`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+}
+
+// ── apply theme & accent live ─────────────────────────────────────────────────
+function applyTheme(theme) {
+    const pref = theme === 'auto'
+        ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+        : theme;
+    document.documentElement.setAttribute('data-theme', pref);
+    // Swap CSS variables if you have a light theme definition; fallback is no-op
+    if (pref === 'light') {
+        document.body.classList.add('theme-light');
+        document.body.classList.remove('theme-dark');
+    } else {
+        document.body.classList.add('theme-dark');
+        document.body.classList.remove('theme-light');
+    }
+}
+
+function applyAccent(hex) {
+    document.documentElement.style.setProperty('--primary-color', hex);
+    // derive a slightly lighter variant for hover states
+    document.documentElement.style.setProperty('--primary-light', hex + 'cc');
+    const hexEl = document.getElementById('accent-hex');
+    if (hexEl) hexEl.textContent = hex;
+}
+
+function applyAnimations(enabled) {
+    if (enabled) {
+        document.body.classList.remove('no-animations');
+    } else {
+        document.body.classList.add('no-animations');
+    }
+}
+
+function applyCompact(enabled) {
+    if (enabled) {
+        document.body.classList.add('compact-mode');
+    } else {
+        document.body.classList.remove('compact-mode');
+    }
+}
+
+// ── populate audio device dropdowns ──────────────────────────────────────────
+async function populateDevices(savedOutput, savedInput) {
+    try {
+        // request permission so device labels are visible
+        await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const outSel  = document.getElementById('audio-output');
+        const inSel   = document.getElementById('audio-input');
+
+        const outputs = devices.filter(d => d.kind === 'audiooutput');
+        const inputs  = devices.filter(d => d.kind === 'audioinput');
+
+        if (outputs.length) {
+            outSel.innerHTML = '<option value="default">System Default</option>';
+            outputs.forEach(d => {
+                const o = new Option(d.label || `Output ${d.deviceId.slice(0,8)}`, d.deviceId);
+                if (d.deviceId === savedOutput) o.selected = true;
+                outSel.appendChild(o);
+            });
+        }
+        if (inputs.length) {
+            inSel.innerHTML = '<option value="default">System Default</option>';
+            inputs.forEach(d => {
+                const o = new Option(d.label || `Microphone ${d.deviceId.slice(0,8)}`, d.deviceId);
+                if (d.deviceId === savedInput) o.selected = true;
+                inSel.appendChild(o);
+            });
+        }
+    } catch (e) {
+        console.warn('Device enumeration failed:', e);
+    }
+}
+
+// ── storage info ──────────────────────────────────────────────────────────────
+async function loadStorageInfo() {
+    try {
+        const res  = await fetch('/api/storage-info');
+        const data = await res.json();
+        if (!data.success) return;
+        const label = document.getElementById('storage-label');
+        const fill  = document.getElementById('storage-fill');
+        const maxMb = parseInt(val('max-storage') || '1000');
+        const usedMb = data.used_mb;
+        const pct  = maxMb === 0 ? 0 : Math.min(100, (usedMb / maxMb) * 100);
+        if (label) label.textContent = `${usedMb} MB used across ${data.project_count} projects — ${data.disk_free_gb} GB free on disk`;
+        if (fill)  fill.style.width  = pct + '%';
+        if (pct > 80 && fill) fill.style.background = '#ef4444';
+    } catch (e) { console.warn('Storage info failed:', e); }
+}
+
+// ── gather current form state ─────────────────────────────────────────────────
+function collectSettings() {
+    return {
+        audio_output:       val('audio-output')       || 'default',
+        audio_input:        val('audio-input')        || 'default',
+        sample_rate:        val('sample-rate')        || '48000',
+        buffer_size:        val('buffer-size')        || '512',
+        normalize_audio:    chk('normalize-audio'),
+        default_model:      val('default-model')      || 'htdemucs',
+        processing_quality: val('processing-quality') || 'balanced',
+        cpu_threads:        parseInt(val('cpu-threads') || '4'),
+        use_gpu:            chk('use-gpu'),
+        auto_cleanup:       chk('auto-cleanup'),
+        theme:              val('theme')              || 'dark',
+        accent_color:       val('accent-color')       || '#6366f1',
+        waveform_colors:    val('waveform-colors')    || 'default',
+        show_animations:    chk('show-animations'),
+        compact_mode:       chk('compact-mode'),
+        max_storage:        val('max-storage')        || '1000',
+        auto_delete_old:    chk('auto-delete-old'),
+        export_format:      val('export-format')      || 'wav',
+        enable_debug:       chk('enable-debug'),
+        api_endpoint:       val('api-endpoint')       || 'http://localhost:5000',
+    };
+}
+
+// ── apply loaded settings to form ─────────────────────────────────────────────
+function applyToForm(s) {
+    setVal('audio-output',       s.audio_output);
+    setVal('audio-input',        s.audio_input);
+    setVal('sample-rate',        s.sample_rate);
+    setVal('buffer-size',        s.buffer_size);
+    setChk('normalize-audio',    s.normalize_audio);
+    setVal('default-model',      s.default_model);
+    setVal('processing-quality', s.processing_quality);
+    setVal('cpu-threads',        s.cpu_threads);
+    setChk('use-gpu',            s.use_gpu);
+    setChk('auto-cleanup',       s.auto_cleanup);
+    setVal('theme',              s.theme);
+    setVal('accent-color',       s.accent_color);
+    setVal('waveform-colors',    s.waveform_colors);
+    setChk('show-animations',    s.show_animations);
+    setChk('compact-mode',       s.compact_mode);
+    setVal('max-storage',        s.max_storage);
+    setChk('auto-delete-old',    s.auto_delete_old);
+    setVal('export-format',      s.export_format);
+    setChk('enable-debug',       s.enable_debug);
+    setVal('api-endpoint',       s.api_endpoint);
+
+    // live visual effects
+    applyTheme(s.theme);
+    applyAccent(s.accent_color);
+    applyAnimations(s.show_animations);
+    applyCompact(s.compact_mode);
+}
+
+// ── save to server ────────────────────────────────────────────────────────────
+async function saveSettings() {
+    const btn = document.getElementById('save-settings-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+    try {
+        const res  = await fetch('/api/settings', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify(collectSettings()),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Settings saved!', 'success');
+            loadStorageInfo();  // refresh storage bar
+        } else {
+            showToast('Save failed: ' + data.error, 'error');
+        }
+    } catch (err) {
+        showToast('Save failed: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Save Settings';
+    }
+}
+
+// ── load from server ──────────────────────────────────────────────────────────
+async function loadSettings() {
+    try {
+        const res  = await fetch('/api/settings');
+        const data = await res.json();
+        const s    = data.success ? data.settings : DEFAULT_SETTINGS;
+        applyToForm(s);
+        await populateDevices(s.audio_output, s.audio_input);
+    } catch (e) {
+        applyToForm(DEFAULT_SETTINGS);
+    }
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+
+    // Tab switching
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const name = tab.dataset.tab;
+            document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            document.querySelectorAll('.settings-panel').forEach(p => {
+                p.classList.toggle('active', p.id === `${name}-settings`);
+            });
+            if (name === 'storage') loadStorageInfo();
+        });
+    });
+
+    // Live theme switch
+    document.getElementById('theme')?.addEventListener('change', e => applyTheme(e.target.value));
+
+    // Live accent color
+    document.getElementById('accent-color')?.addEventListener('input', e => applyAccent(e.target.value));
+    document.getElementById('accent-reset-btn')?.addEventListener('click', () => {
+        setVal('accent-color', '#6366f1');
+        applyAccent('#6366f1');
+    });
+
+    // Live animations toggle
+    document.getElementById('show-animations')?.addEventListener('change', e => applyAnimations(e.target.checked));
+
+    // Live compact toggle
+    document.getElementById('compact-mode')?.addEventListener('change', e => applyCompact(e.target.checked));
+
+    // Save
+    document.getElementById('save-settings-btn')?.addEventListener('click', saveSettings);
+
+    // Reset to defaults
+    document.getElementById('reset-settings-btn')?.addEventListener('click', async () => {
+        if (!confirm('Reset all settings to their defaults?')) return;
+        applyToForm(DEFAULT_SETTINGS);
+        await populateDevices(DEFAULT_SETTINGS.audio_output, DEFAULT_SETTINGS.audio_input);
+        showToast('Reset to defaults. Click Save to persist.', 'info');
+    });
+
+    // Clear cache
+    document.getElementById('clear-cache-btn')?.addEventListener('click', async () => {
+        if (!confirm('Delete all files in the uploads/ and separated/ folders?')) return;
+        try {
+            const res  = await fetch('/api/clear-cache', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) { showToast(`Cache cleared (${data.removed} items removed).`, 'success'); loadStorageInfo(); }
+            else showToast('Clear failed: ' + data.error, 'error');
+        } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    });
+
+    // Export settings JSON
+    document.getElementById('export-settings-btn')?.addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(collectSettings(), null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'karaoke_settings.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+
+    // Import settings JSON
+    document.getElementById('import-settings-input')?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            const s    = JSON.parse(text);
+            applyToForm({ ...DEFAULT_SETTINGS, ...s });
+            await populateDevices(s.audio_output || 'default', s.audio_input || 'default');
+            showToast('Settings imported. Click Save to persist.', 'success');
+        } catch (err) {
+            showToast('Import failed: invalid JSON file.', 'error');
+        }
+        e.target.value = '';
+    });
+
+    // Boot
+    await loadSettings();
+    loadStorageInfo();
+});
+</script>
+{% endblock %}

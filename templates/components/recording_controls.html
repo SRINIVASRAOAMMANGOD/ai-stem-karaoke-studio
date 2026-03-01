@@ -1,0 +1,124 @@
+<section class="recording-controls-section" id="recording-controls-section" style="display: none;">
+    <div class="recording-controls-container">
+        <h3><i class="fas fa-circle"></i> Recording Studio</h3>
+        
+        <!-- Recording Status -->
+        <div class="recording-status">
+            <div class="status-indicator" id="recording-indicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Ready to Record</span>
+            </div>
+            <div class="recording-timer" id="recording-timer">
+                00:00
+            </div>
+        </div>
+        
+        <!-- Microphone Setup -->
+        <div class="microphone-setup">
+            <h4><i class="fas fa-microphone"></i> Microphone Setup</h4>
+            <div class="mic-controls">
+                <div class="control-group">
+                    <label for="mic-select">Select Microphone</label>
+                    <select id="mic-select">
+                        <option value="">Requesting microphone access...</option>
+                    </select>
+                    <button class="btn-icon" id="refresh-mics" title="Refresh Devices">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+                
+                <div class="control-group">
+                    <label>Input Level</label>
+                    <div class="input-level-meter">
+                        <div class="level-bar" id="input-level-bar"></div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label>Microphone Gain</label>
+                    <input type="range" id="mic-gain" min="0" max="100" value="75">
+                    <span class="control-value">75%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recording Controls -->
+        <div class="rec-controls">
+            <h4><i class="fas fa-record-vinyl"></i> Recording Controls</h4>
+            <div class="rec-buttons">
+                <button class="btn-rec" id="record-btn" title="Start Recording">
+                    <i class="fas fa-circle"></i>
+                    <span>Record</span>
+                </button>
+                <button class="btn-rec" id="pause-rec-btn" style="display: none;" title="Pause Recording">
+                    <i class="fas fa-pause"></i>
+                    <span>Pause</span>
+                </button>
+                <button class="btn-rec" id="stop-rec-btn" style="display: none;" title="Stop Recording">
+                    <i class="fas fa-stop"></i>
+                    <span>Stop</span>
+                </button>
+                <button class="btn-rec" id="play-rec-btn" style="display: none;" title="Play Recording">
+                    <i class="fas fa-play"></i>
+                    <span>Play</span>
+                </button>
+                <button class="btn-rec" id="save-rec-btn" style="display: none;" title="Save Recording">
+                    <i class="fas fa-save"></i>
+                    <span>Save</span>
+                </button>
+                <button class="btn-rec" id="discard-rec-btn" style="display: none;" title="Discard Recording">
+                    <i class="fas fa-trash"></i>
+                    <span>Discard</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Recording Options -->
+        <div class="recording-options">
+            <h4><i class="fas fa-cog"></i> Recording Options</h4>
+            <div class="options-grid">
+                <div class="option-item">
+                    <label>
+                        <input type="checkbox" id="metronome-enable">
+                        Enable Metronome
+                    </label>
+                </div>
+                <div class="option-item">
+                    <label>
+                        <input type="checkbox" id="count-in-enable" checked>
+                        Count-in (4 beats)
+                    </label>
+                </div>
+                <div class="option-item">
+                    <label>
+                        <input type="checkbox" id="monitor-enable" checked>
+                        Monitor Input
+                    </label>
+                </div>
+                <div class="option-item">
+                    <label>
+                        <input type="checkbox" id="auto-save-enable">
+                        Auto-save Recordings
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recorded Takes -->
+        <div class="recorded-takes">
+            <h4><i class="fas fa-list"></i> Recorded Takes</h4>
+            <div class="takes-list" id="takes-list">
+                <div class="no-takes">
+                    <i class="fas fa-microphone-slash"></i>
+                    <p>No recordings yet</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recording Waveform -->
+        <div class="recording-waveform" id="recording-waveform" style="display: none;">
+            <h4><i class="fas fa-wave-square"></i> Recording Waveform</h4>
+            <div id="recording-wave"></div>
+        </div>
+    </div>
+</section>

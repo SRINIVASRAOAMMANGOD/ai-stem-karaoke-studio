@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}Compare - {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h2><i class="fas fa-compress-arrows-alt"></i> Comparison & Analysis - {{ project.name }}</h2>
+        <div class="actions">
+            <button class="btn btn-primary" id="analyze-btn">
+                <i class="fas fa-robot"></i> Analyze Performance
+            </button>
+            <a href="{{ url_for('karaoke', project_id=project.id) }}" class="btn btn-secondary">
+                <i class="fas fa-microphone"></i> Record Again
+            </a>
+        </div>
+    </div>
+
+    <!-- Comparison Layout -->
+    {% include 'components/comparison_layout.html' %}
+    
+    <!-- AI Score Dashboard -->
+    {% include 'components/ai_score_dashboard.html' %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+    const projectId = '{{ project.id }}';
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        initComparison();
+        
+        document.getElementById('analyze-btn').addEventListener('click', analyzePerformance);
+    });
+    
+    function initComparison() {
+        console.log('Comparison initialized for project:', projectId);
+        // TODO: Load waveforms for comparison
+    }
+    
+    async function analyzePerformance() {
+        try {
+            document.getElementById('analyze-btn').disabled = true;
+            document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            
+            const response = await fetch(`/api/analyze-performance/${projectId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                displayAnalysis(data.analysis);
+                document.getElementById('ai-score-section').style.display = 'block';
+                document.getElementById('ai-score-section').scrollIntoView({ behavior: 'smooth' });
+            } else {
+                alert('Analysis failed: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Analysis error:', error);
+            alert('Failed to analyze performance');
+        } finally {
+            document.getElementById('analyze-btn').disabled = false;
+            document.getElementById('analyze-btn').innerHTML = '<i class="fas fa-robot"></i> Analyze Performance';
+        }
+    }
+    
+    function displayAnalysis(analysis) {
+        // Update overall score
+        document.getElementById('overall-score').textContent = analysis.overall_score;
+        document.getElementById('score-rating').textContent = getRating(analysis.overall_score);
+        
+        // Update metrics
+        updateMetric('pitch', analysis.pitch_accuracy);
+        updateMetric('timing', analysis.timing_accuracy);
+        updateMetric('volume', analysis.volume_stability);
+        
+        // Update feedback
+        document.getElementById('ai-insights-content').innerHTML = `<p>${analysis.feedback}</p>`;
+    }
+    
+    function updateMetric(name, value) {
+        document.getElementById(`${name}-score`).textContent = value;
+        document.getElementById(`${name}-fill`).style.width = value + '%';
+    }
+    
+    function getRating(score) {
+        if (score >= 90) return 'Excellent!';
+        if (score >= 80) return 'Great!';
+        if (score >= 70) return 'Good';
+        if (score >= 60) return 'Fair';
+        return 'Needs Improvement';
+    }
+</script>
+{% endblock %}

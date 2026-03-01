@@ -1,0 +1,264 @@
+<section class="settings-section" id="settings-section">
+    <div class="settings-container">
+        <h3><i class="fas fa-cog"></i> Settings</h3>
+        
+        <div class="settings-tabs">
+            <button class="settings-tab active" data-tab="audio">
+                <i class="fas fa-volume-up"></i> Audio
+            </button>
+            <button class="settings-tab" data-tab="processing">
+                <i class="fas fa-microchip"></i> Processing
+            </button>
+            <button class="settings-tab" data-tab="appearance">
+                <i class="fas fa-palette"></i> Appearance
+            </button>
+            <button class="settings-tab" data-tab="storage">
+                <i class="fas fa-database"></i> Storage
+            </button>
+            <button class="settings-tab" data-tab="advanced">
+                <i class="fas fa-wrench"></i> Advanced
+            </button>
+        </div>
+        
+        <div class="settings-content">
+            <!-- Audio Settings -->
+            <div class="settings-panel active" id="audio-settings">
+                <h4>Audio Settings</h4>
+                
+                <div class="setting-group">
+                    <label>Audio Output Device</label>
+                    <select id="audio-output">
+                        <option value="default">System Default</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Audio Input Device</label>
+                    <select id="audio-input">
+                        <option value="default">System Default</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Sample Rate</label>
+                    <select id="sample-rate">
+                        <option value="44100">44.1 kHz (CD Quality)</option>
+                        <option value="48000" selected>48 kHz (Studio Standard)</option>
+                        <option value="96000">96 kHz (High Quality)</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Buffer Size</label>
+                    <select id="buffer-size">
+                        <option value="128">128 samples (Low Latency)</option>
+                        <option value="256">256 samples (Balanced)</option>
+                        <option value="512" selected>512 samples (Stable)</option>
+                        <option value="1024">1024 samples (High Stability)</option>
+                    </select>
+                    <p class="setting-help">Lower values reduce latency but may cause audio glitches</p>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="normalize-audio" checked>
+                        Normalize Audio Levels
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Processing Settings -->
+            <div class="settings-panel" id="processing-settings">
+                <h4>Processing Settings</h4>
+                
+                <div class="setting-group">
+                    <label>Default Separation Model</label>
+                    <select id="default-model">
+                        <option value="htdemucs" selected>HT-Demucs (Best Quality)</option>
+                        <option value="htdemucs_ft">HT-Demucs Fine-tuned</option>
+                        <option value="htdemucs_6s">HT-Demucs 6-stems</option>
+                        <option value="mdx_extra">MDX Extra</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Processing Quality</label>
+                    <select id="processing-quality">
+                        <option value="fast">Fast (Lower Quality)</option>
+                        <option value="balanced" selected>Balanced</option>
+                        <option value="best">Best (Slower)</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>CPU Threads</label>
+                    <input type="number" id="cpu-threads" min="1" max="16" value="4">
+                    <p class="setting-help">Number of CPU threads to use for processing</p>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="use-gpu" checked>
+                        Use GPU Acceleration (if available)
+                    </label>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="auto-cleanup" checked>
+                        Automatically Clean Up Temporary Files
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Appearance Settings -->
+            <div class="settings-panel" id="appearance-settings">
+                <h4>Appearance Settings</h4>
+                
+                <div class="setting-group">
+                    <label>Theme</label>
+                    <select id="theme">
+                        <option value="light">Light</option>
+                        <option value="dark" selected>Dark</option>
+                        <option value="auto">Auto (System)</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Accent Color</label>
+                    <div class="color-picker">
+                        <input type="color" id="accent-color" value="#6366f1">
+                    </div>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Waveform Color Scheme</label>
+                    <select id="waveform-colors">
+                        <option value="default" selected>Default</option>
+                        <option value="vibrant">Vibrant</option>
+                        <option value="pastel">Pastel</option>
+                        <option value="monochrome">Monochrome</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="show-animations" checked>
+                        Enable Animations
+                    </label>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="compact-mode">
+                        Compact Mode
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Storage Settings -->
+            <div class="settings-panel" id="storage-settings">
+                <h4>Storage Settings</h4>
+                
+                <div class="storage-info">
+                    <div class="storage-stat">
+                        <label>Used Space</label>
+                        <div class="storage-bar">
+                            <div class="storage-fill" style="width: 35%"></div>
+                        </div>
+                        <span>350 MB / 1 GB</span>
+                    </div>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Default Save Location</label>
+                    <div class="input-with-button">
+                        <input type="text" id="save-location" value="./separated" readonly>
+                        <button class="btn btn-secondary">Browse</button>
+                    </div>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Maximum Storage</label>
+                    <select id="max-storage">
+                        <option value="500">500 MB</option>
+                        <option value="1000" selected>1 GB</option>
+                        <option value="5000">5 GB</option>
+                        <option value="unlimited">Unlimited</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="auto-delete-old" checked>
+                        Auto-delete projects older than 30 days
+                    </label>
+                </div>
+                
+                <div class="setting-group">
+                    <button class="btn btn-secondary" id="clear-cache-btn">
+                        <i class="fas fa-trash"></i> Clear Cache
+                    </button>
+                    <button class="btn btn-secondary" id="clear-temp-btn">
+                        <i class="fas fa-broom"></i> Clear Temporary Files
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Advanced Settings -->
+            <div class="settings-panel" id="advanced-settings">
+                <h4>Advanced Settings</h4>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="enable-debug">
+                        Enable Debug Mode
+                    </label>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="enable-telemetry">
+                        Send Anonymous Usage Statistics
+                    </label>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Export Format</label>
+                    <select id="export-format">
+                        <option value="wav">WAV (Lossless)</option>
+                        <option value="flac">FLAC (Lossless Compressed)</option>
+                        <option value="mp3" selected>MP3 (320 kbps)</option>
+                        <option value="ogg">OGG Vorbis</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>API Endpoint (Advanced)</label>
+                    <input type="text" id="api-endpoint" value="http://localhost:5000" placeholder="http://localhost:5000">
+                </div>
+                
+                <div class="setting-group">
+                    <button class="btn btn-secondary" id="export-settings-btn">
+                        <i class="fas fa-file-export"></i> Export Settings
+                    </button>
+                    <button class="btn btn-secondary" id="import-settings-btn">
+                        <i class="fas fa-file-import"></i> Import Settings
+                    </button>
+                    <button class="btn btn-danger" id="reset-settings-btn">
+                        <i class="fas fa-undo"></i> Reset to Defaults
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="settings-footer">
+            <button class="btn btn-primary" id="save-settings-btn">
+                <i class="fas fa-save"></i> Save Settings
+            </button>
+            <button class="btn btn-secondary" id="cancel-settings-btn">
+                Cancel
+            </button>
+        </div>
+    </div>
+</section>

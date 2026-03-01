@@ -1,0 +1,936 @@
+{% extends 'base.html' %}
+
+{% block title %}Karaoke – {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+  <!-- Page Header -->
+  <div class="page-header">
+    <h2><i class="fas fa-microphone-alt"></i> Karaoke – {{ project.name }}</h2>
+    <div class="actions" style="display:flex;gap:.5rem;align-items:center;">
+      <a href="{{ url_for('mixer', project_id=project.id) }}" class="btn btn-secondary">
+        <i class="fas fa-sliders-h"></i> Mixer
+      </a>
+      <a href="{{ url_for('compare', project_id=project.id) }}" class="btn btn-primary"
+         id="compare-btn" style="display:none;">
+        <i class="fas fa-compress-arrows-alt"></i> Compare Recording
+      </a>
+    </div>
+  </div>
+
+  <!-- ① Backing Track Player -->
+  <!-- Audio unlock banner -->
+  <div id="audio-unlock-banner" class="audio-unlock-banner" style="display:none;">
+    <i class="fas fa-volume-up"></i>
+    <span>Stems ready — click anywhere or press <strong>Record</strong> to start</span>
+    <button onclick="document.getElementById('audio-unlock-banner').style.display='none'" class="btn" style="background:transparent;border:1px solid rgba(255,255,255,.3);color:#ccc;padding:.35rem .7rem;border-radius:6px;cursor:pointer;margin-left:auto">&times; Dismiss</button>
+  </div>
+
+  <section class="karaoke-section" id="backing-section">
+    <div class="section-title"><i class="fas fa-music"></i> Backing Track</div>
+    <div class="backing-loading" id="backing-loading">
+      <i class="fas fa-spinner fa-spin"></i> Loading stems…
+    </div>
+    <div id="backing-ready" style="display:none;">
+      <div class="stem-toggles" id="stem-toggles"></div>
+      <div class="backing-transport">
+        <button class="btn-rec" id="play-backing-btn"><i class="fas fa-play"></i><span>Play</span></button>
+        <button class="btn-rec" id="pause-backing-btn" style="display:none;"><i class="fas fa-pause"></i><span>Pause</span></button>
+        <button class="btn-rec" id="stop-backing-btn"><i class="fas fa-stop"></i><span>Stop</span></button>
+        <div class="backing-vol-group">
+          <label><i class="fas fa-volume-up"></i></label>
+          <input type="range" id="backing-volume" min="0" max="100" value="80" style="width:110px;">
+          <span id="backing-vol-display">80%</span>
+        </div>
+        <div class="backing-position">
+          <span id="backing-time">0:00</span>
+          <input type="range" id="backing-seek" min="0" max="100" value="0" style="width:180px;">
+          <span id="backing-duration">–:––</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② Main 2-column layout -->
+  <div class="karaoke-layout">
+
+    <!-- LEFT: Lyrics -->
+    <section class="karaoke-section lyrics-panel">
+      <div class="section-title">
+        <i class="fas fa-align-left"></i> Lyrics
+        <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center;">
+          <select id="font-size-select" class="mini-select">
+            <option value="small">Sm</option>
+            <option value="medium" selected>Md</option>
+            <option value="large">Lg</option>
+            <option value="xlarge">XL</option>
+          </select>
+          <button class="btn-icon" id="edit-lyrics-btn" title="Edit Lyrics"><i class="fas fa-eye-slash"></i></button>
+        </div>
+      </div>
+      <div class="lyrics-display" id="lyrics-display">
+        <div class="lyrics-placeholder">
+          <i class="fas fa-music"></i>
+          <p>Paste lyrics in the editor below</p>
+        </div>
+      </div>
+      <textarea id="lyrics-editor" class="lyrics-editor"
+        placeholder="Paste your lyrics here… each line will highlight in sync with playback."></textarea>
+    </section>
+
+    <!-- RIGHT: Effects + Mic + Recording -->
+    <div class="karaoke-right">
+
+      <!-- Vocal Effects -->
+      <section class="karaoke-section effects-panel">
+        <div class="section-title"><i class="fas fa-magic"></i> Vocal Effects</div>
+        <div class="effects-grid">
+          <div class="effect-row">
+            <label>Reverb</label>
+            <input type="range" id="reverb-slider" min="0" max="100" value="20">
+            <span id="reverb-value">20%</span>
+          </div>
+          <div class="effect-row">
+            <label>Echo</label>
+            <input type="range" id="echo-slider" min="0" max="100" value="10">
+            <span id="echo-value">10%</span>
+          </div>
+          <div class="effect-row">
+            <label>Autotune</label>
+            <input type="range" id="autotune-slider" min="0" max="100" value="0">
+            <span id="autotune-value">Off</span>
+          </div>
+        </div>
+        <div class="presets-row">
+          <button class="btn btn-secondary preset-btn" data-preset="classic"><i class="fas fa-music"></i> Classic</button>
+          <button class="btn btn-secondary preset-btn" data-preset="concert"><i class="fas fa-guitar"></i> Concert</button>
+          <button class="btn btn-secondary preset-btn" data-preset="studio"><i class="fas fa-microphone"></i> Studio</button>
+        </div>
+      </section>
+
+      <!-- Microphone -->
+      <section class="karaoke-section mic-panel">
+        <div class="section-title"><i class="fas fa-microphone"></i> Microphone</div>
+        <div class="mic-row">
+          <select id="mic-select" style="flex:1;"></select>
+          <button class="btn-icon" id="refresh-mics" title="Refresh mics"><i class="fas fa-sync"></i></button>
+        </div>
+        <div class="mic-row">
+          <label>Gain</label>
+          <input type="range" id="mic-gain" min="0" max="200" value="100" style="flex:1;">
+          <span id="mic-gain-display">100%</span>
+        </div>
+        <div class="mic-row">
+          <label>Level</label>
+          <canvas id="level-canvas" width="240" height="14" style="flex:1;border-radius:4px;background:#1a1a2e;"></canvas>
+        </div>
+        <div class="mic-options">
+          <label><input type="checkbox" id="monitor-enable"> Monitor Input</label>
+          <label><input type="checkbox" id="count-in-enable" checked> Count-in (4 beats)</label>
+          <label><input type="checkbox" id="auto-scroll" checked> Auto-scroll Lyrics</label>
+          <label><input type="checkbox" id="play-backing-while-recording" checked> Play music while recording</label>
+          <label><input type="checkbox" id="include-vocals-in-backing"> Include vocals in playback</label>
+        </div>
+      </section>
+
+      <!-- Recording Controls -->
+      <section class="karaoke-section rec-panel">
+        <div class="section-title"><i class="fas fa-record-vinyl"></i> Recording Studio</div>
+        <div class="rec-status-row">
+          <div class="status-indicator" id="recording-indicator">
+            <span class="status-dot"></span>
+            <span class="status-text">Ready to Record</span>
+          </div>
+          <div class="recording-timer" id="recording-timer">00:00.00</div>
+        </div>
+        <div class="rec-buttons">
+          <button class="btn-rec btn-rec-record" id="record-btn"><i class="fas fa-circle"></i><span>Record</span></button>
+          <button class="btn-rec" id="pause-rec-btn" style="display:none;"><i class="fas fa-pause"></i><span>Pause</span></button>
+          <button class="btn-rec" id="stop-rec-btn" style="display:none;"><i class="fas fa-stop"></i><span>Stop</span></button>
+          <button class="btn-rec" id="play-rec-btn" style="display:none;"><i class="fas fa-play"></i><span>Play</span></button>
+          <button class="btn-rec btn-rec-save" id="save-rec-btn" style="display:none;"><i class="fas fa-save"></i><span>Save</span></button>
+          <button class="btn-rec btn-rec-discard" id="discard-rec-btn" style="display:none;"><i class="fas fa-trash"></i><span>Discard</span></button>
+        </div>
+      </section>
+
+    </div><!-- /karaoke-right -->
+  </div><!-- /karaoke-layout -->
+
+  <!-- ③ Recorded Takes -->
+  <section class="karaoke-section takes-section" id="takes-section" style="display:none;">
+    <div class="section-title"><i class="fas fa-list"></i> Recorded Takes</div>
+    <div class="takes-list" id="takes-list"></div>
+  </section>
+
+  <div style="height:2rem;"></div>
+
+</div><!-- /container -->
+
+<!-- ── Count-in Overlay ── -->
+<div id="countin-overlay" class="countin-overlay" style="display:none;">
+  <div class="countin-inner">
+    <div class="countin-label"><i class="fas fa-music"></i> Get Ready to Sing</div>
+    <div class="countin-number" id="countin-number">4</div>
+    <div class="countin-dots">
+      <span class="cdot" id="cdot-4"></span>
+      <span class="cdot" id="cdot-3"></span>
+      <span class="cdot" id="cdot-2"></span>
+      <span class="cdot" id="cdot-1"></span>
+    </div>
+    <div class="countin-hint">Music starts after GO! — get ready to sing!</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* =====================================================
+   KARAOKE PAGE – FULL IMPLEMENTATION
+   ===================================================== */
+const projectId = '{{ project.id }}';
+
+/* ── State ── */
+let backingAudios    = {};   // { stemName: HTMLAudioElement }
+let stemEnabled      = {};
+let isBackingPlaying = false;
+let seekInterval     = null;
+let audioUnlocked    = false; // tracks whether browser audio has been unlocked
+
+let micStream        = null;
+let audioCtx         = null;
+let gainNode         = null;
+let analyserNode     = null;
+let reverbNode       = null;
+let reverbMixNode    = null;
+let delayNode        = null;
+let delayFeedback    = null;
+let delayMixNode     = null;
+let monitorGain      = null;
+let effectsDest      = null;
+let animFrameId      = null;
+
+let mediaRecorder    = null;
+let audioChunks      = [];
+let recordedBlob     = null;
+let recordedUrl      = null;
+let recStartTime     = null;
+let recTimerInterval = null;
+let pausedElapsed    = 0;
+let takes            = [];
+let backingStartedByRecording = false;
+
+let lyricsLines      = [];
+let currentLyricIdx  = -1;
+let lyricAnimId      = null;
+let lyricsEditorOpen = true;
+
+/* =====================================================
+   INIT
+   ===================================================== */
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadStems();
+  await enumerateMics();
+  bindAllControls();
+  loadSavedLyrics();
+});
+
+
+/* =====================================================
+   BACKING TRACK
+   ===================================================== */
+async function loadStems() {
+  try {
+    const resp = await fetch(`/api/stems/${projectId}`);
+    const data = await resp.json();
+    if (!data.success || !data.stems || !Object.keys(data.stems).length) {
+      document.getElementById('backing-loading').innerHTML =
+        '<i class="fas fa-exclamation-circle"></i> No stems found for this project.';
+      return;
+    }
+
+    const togglesEl = document.getElementById('stem-toggles');
+
+    // API returns stems as { name: url, ... } — convert to iterable entries
+    Object.entries(data.stems).forEach(([stemName, stemUrl]) => {
+      const audio = document.createElement('audio');
+      audio.src = stemUrl;
+      audio.crossOrigin = 'anonymous';
+      audio.preload = 'auto';
+      audio.style.display = 'none';
+      document.body.appendChild(audio); // attaching to DOM makes autoplay policy happy
+
+      const isVocal = /vocal/i.test(stemName);
+      stemEnabled[stemName] = !isVocal;
+      audio.volume = stemEnabled[stemName] ? 0.8 : 0;
+      backingAudios[stemName] = audio;
+
+      audio.addEventListener('loadedmetadata', updateDurationDisplay);
+      audio.addEventListener('ended', onBackingEnded);
+
+      // Chip toggle
+      const chip = document.createElement('label');
+      chip.className = 'stem-chip' + (stemEnabled[stemName] ? ' active' : '');
+      chip.innerHTML = `<input type="checkbox" ${stemEnabled[stemName] ? 'checked' : ''}
+        data-stem="${stemName}"> ${stemName}`;
+      chip.querySelector('input').addEventListener('change', function() {
+        stemEnabled[this.dataset.stem] = this.checked;
+        chip.classList.toggle('active', this.checked);
+        updateStemVolumes();
+      });
+      togglesEl.appendChild(chip);
+    });
+
+    document.getElementById('backing-loading').style.display = 'none';
+    document.getElementById('backing-ready').style.display  = '';
+    startSeekbar();
+
+    // Show info banner and register a capture-phase one-time click listener.
+    // Capture fires BEFORE any element's own click handler, so audio is always
+    // unlocked before startRecording() calls a.play().
+    document.getElementById('audio-unlock-banner').style.display = 'flex';
+    document.addEventListener('click', activateAudio, { once: true, capture: true });
+
+  } catch(err) {
+    document.getElementById('backing-loading').innerHTML =
+      '<i class="fas fa-exclamation-circle"></i> Could not load stems: ' + err.message;
+  }
+}
+
+function updateStemVolumes() {
+  const vol = document.getElementById('backing-volume').value / 100;
+  Object.entries(backingAudios).forEach(([name, audio]) => {
+    audio.volume = stemEnabled[name] ? vol : 0;
+  });
+}
+
+function getFirstAudio() { return Object.values(backingAudios)[0] || null; }
+
+/* Unlock all audio elements with a silent play (volume 0) during a user gesture.
+   Registered as a capture-phase document listener so it fires BEFORE any
+   element's own click handler — guaranteeing audio is unlocked before
+   startRecording() calls a.play(). We do NOT pause here; startRecording()
+   will call pause()+play() itself, avoiding any microtask race. */
+function activateAudio() {
+  const banner = document.getElementById('audio-unlock-banner');
+  const audios = Object.values(backingAudios);
+  if (!audios.length) return;
+
+  audios.forEach(a => {
+    const savedVol = a.volume;
+    a.volume = 0;
+    // Play silently — just enough to satisfy the browser's autoplay gate.
+    // startRecording() will pause → rewind → play at real volume immediately after.
+    a.play().catch(() => {});
+    // Restore volume after a tick so the silent play doesn't linger if
+    // startRecording is NOT called (e.g. user clicked something else).
+    setTimeout(() => {
+      if (!isBackingPlaying) { a.pause(); a.currentTime = 0; }
+      a.volume = savedVol;
+    }, 200);
+  });
+
+  audioUnlocked = true;
+  if (banner) {
+    banner.classList.add('audio-unlock-done');
+    setTimeout(() => { banner.style.display = 'none'; }, 500);
+  }
+}
+
+function playBacking() {
+  if (!Object.keys(backingAudios).length) return;
+  const ref = getFirstAudio();
+  const vol = document.getElementById('backing-volume').value / 100;
+  let anyFailed = false;
+  Object.entries(backingAudios).forEach(([name, a]) => {
+    a.currentTime = ref.currentTime;
+    a.volume = stemEnabled[name] ? vol : 0;
+    const promise = a.play();
+    if (promise) promise.catch(err => {
+      if (!anyFailed) {
+        anyFailed = true;
+        showToast('Audio blocked by browser. Try clicking the Play button once first.', 'warning');
+        console.warn('playBacking blocked:', err);
+      }
+    });
+  });
+  isBackingPlaying = true;
+  document.getElementById('play-backing-btn').style.display  = 'none';
+  document.getElementById('pause-backing-btn').style.display = 'inline-flex';
+  startLyricSync();
+}
+
+function pauseBacking() {
+  Object.values(backingAudios).forEach(a => a.pause());
+  isBackingPlaying = false;
+  document.getElementById('play-backing-btn').style.display  = 'inline-flex';
+  document.getElementById('pause-backing-btn').style.display = 'none';
+  if (lyricAnimId) { cancelAnimationFrame(lyricAnimId); lyricAnimId = null; }
+}
+
+function stopBacking() {
+  Object.values(backingAudios).forEach(a => { a.pause(); a.currentTime = 0; });
+  isBackingPlaying = false;
+  document.getElementById('play-backing-btn').style.display  = 'inline-flex';
+  document.getElementById('pause-backing-btn').style.display = 'none';
+  document.getElementById('backing-seek').value = 0;
+  document.getElementById('backing-time').textContent = '0:00';
+  if (lyricAnimId) { cancelAnimationFrame(lyricAnimId); lyricAnimId = null; }
+  currentLyricIdx = -1;
+  document.querySelectorAll('.lyrics-line.active').forEach(el => el.classList.remove('active'));
+}
+
+function onBackingEnded() {
+  isBackingPlaying = false;
+  document.getElementById('play-backing-btn').style.display  = 'inline-flex';
+  document.getElementById('pause-backing-btn').style.display = 'none';
+}
+
+function updateDurationDisplay() {
+  const ref = getFirstAudio();
+  if (!ref || !ref.duration) return;
+  document.getElementById('backing-duration').textContent = fmtTime(ref.duration);
+  document.getElementById('backing-seek').max = Math.floor(ref.duration);
+}
+
+function startSeekbar() {
+  if (seekInterval) clearInterval(seekInterval);
+  seekInterval = setInterval(() => {
+    const ref = getFirstAudio();
+    if (!ref || !isBackingPlaying) return;
+    document.getElementById('backing-time').textContent = fmtTime(ref.currentTime);
+    document.getElementById('backing-seek').value = Math.floor(ref.currentTime);
+  }, 250);
+}
+
+function fmtTime(s) {
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.floor(s % 60)).padStart(2,'0')}`;
+}
+
+/* =====================================================
+   MICROPHONE & AUDIO PIPELINE
+   ===================================================== */
+async function enumerateMics() {
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(s => s.getTracks().forEach(t => t.stop())).catch(()=>{});
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    const sel = document.getElementById('mic-select');
+    sel.innerHTML = '';
+    mics.forEach((mic, i) => {
+      const opt = document.createElement('option');
+      opt.value = mic.deviceId;
+      opt.textContent = mic.label || `Microphone ${i + 1}`;
+      sel.appendChild(opt);
+    });
+    if (!mics.length) sel.innerHTML = '<option>No microphones detected</option>';
+  } catch(err) {
+    document.getElementById('mic-select').innerHTML = '<option>Mic access denied</option>';
+  }
+}
+
+async function initAudioPipeline() {
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (audioCtx && audioCtx.state !== 'closed') await audioCtx.close();
+
+  const deviceId = document.getElementById('mic-select').value;
+  const constraints = {
+    audio: deviceId
+      ? { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false }
+      : { echoCancellation: false }
+  };
+  micStream = await navigator.mediaDevices.getUserMedia(constraints);
+  audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+  if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+
+  const src = audioCtx.createMediaStreamSource(micStream);
+
+  gainNode     = audioCtx.createGain();
+  gainNode.gain.value = document.getElementById('mic-gain').value / 100;
+
+  analyserNode = audioCtx.createAnalyser();
+  analyserNode.fftSize = 256;
+
+  // Reverb
+  reverbNode   = audioCtx.createConvolver();
+  reverbNode.buffer = buildIR(audioCtx, 2.5, 3);
+  reverbMixNode = audioCtx.createGain();
+  reverbMixNode.gain.value = document.getElementById('reverb-slider').value / 100;
+
+  // Echo
+  delayNode    = audioCtx.createDelay(1.0);
+  delayNode.delayTime.value = 0.3;
+  delayFeedback = audioCtx.createGain();
+  delayFeedback.gain.value  = 0;
+  delayMixNode  = audioCtx.createGain();
+  delayMixNode.gain.value   = document.getElementById('echo-slider').value / 100;
+
+  effectsDest  = audioCtx.createMediaStreamDestination();
+  monitorGain  = audioCtx.createGain();
+  monitorGain.gain.value = document.getElementById('monitor-enable').checked ? 0.7 : 0;
+
+  // Routing
+  src.connect(gainNode);
+  gainNode.connect(analyserNode);
+  gainNode.connect(effectsDest);        // dry
+  gainNode.connect(reverbNode);
+  reverbNode.connect(reverbMixNode);
+  reverbMixNode.connect(effectsDest);   // reverb wet
+  gainNode.connect(delayNode);
+  delayNode.connect(delayFeedback);
+  delayFeedback.connect(delayNode);     // feedback loop
+  delayNode.connect(delayMixNode);
+  delayMixNode.connect(effectsDest);    // echo wet
+  gainNode.connect(monitorGain);
+  monitorGain.connect(audioCtx.destination); // monitor
+
+  drawLevelMeter();
+  return effectsDest.stream;
+}
+
+function buildIR(ctx, dur, decay) {
+  const len = Math.floor(ctx.sampleRate * dur);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const ch = buf.getChannelData(c);
+    for (let i = 0; i < len; i++)
+      ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  return buf;
+}
+
+function drawLevelMeter() {
+  if (!analyserNode) return;
+  const canvas = document.getElementById('level-canvas');
+  const ctx2   = canvas.getContext('2d');
+  const data   = new Uint8Array(analyserNode.frequencyBinCount);
+  function frame() {
+    animFrameId = requestAnimationFrame(frame);
+    analyserNode.getByteFrequencyData(data);
+    const avg = data.reduce((a,b) => a+b, 0) / data.length;
+    const pct = Math.min(avg / 80, 1);
+    ctx2.clearRect(0, 0, canvas.width, canvas.height);
+    const g = ctx2.createLinearGradient(0, 0, canvas.width, 0);
+    g.addColorStop(0,   '#00ff88');
+    g.addColorStop(0.6, '#ffcc00');
+    g.addColorStop(1,   '#ff4444');
+    ctx2.fillStyle = g;
+    ctx2.fillRect(0, 0, canvas.width * pct, canvas.height);
+  }
+  frame();
+}
+
+function updateEffects() {
+  if (!reverbMixNode) return;
+  reverbMixNode.gain.value    = document.getElementById('reverb-slider').value / 100;
+  const ev = document.getElementById('echo-slider').value / 100;
+  delayMixNode.gain.value     = ev;
+  delayFeedback.gain.value    = ev * 0.45;
+}
+
+/* =====================================================
+   RECORDING
+   ===================================================== */
+async function startRecording() {
+  const hasBacking  = Object.keys(backingAudios).length > 0;
+  const willPlay    = hasBacking && document.getElementById('play-backing-while-recording').checked;
+
+  /* Hide the unlock banner. */
+  const banner = document.getElementById('audio-unlock-banner');
+  if (banner) banner.style.display = 'none';
+
+  /* ── Step 1: count-in FIRST (silent) ────────────────────────────────
+     Audio elements are already unlocked because the capture-phase
+     activateAudio() fired before this handler on the same click gesture,
+     so a.play() will succeed after the await below.                    */
+  if (document.getElementById('count-in-enable').checked) await doCountIn(4);
+
+  /* ── Step 2: start music AFTER count-in ── */
+  if (willPlay) {
+    const includeVocals = document.getElementById('include-vocals-in-backing').checked;
+    const vol = document.getElementById('backing-volume').value / 100;
+
+    // Set vocal stem visibility
+    Object.keys(stemEnabled).forEach(name => {
+      if (/vocal/i.test(name)) {
+        stemEnabled[name] = includeVocals;
+        const chk = document.querySelector(`input[data-stem="${name}"]`);
+        if (chk) {
+          chk.checked = includeVocals;
+          chk.closest('.stem-chip')?.classList.toggle('active', includeVocals);
+        }
+      }
+    });
+
+    // Reset position and set volumes, then PLAY
+    Object.entries(backingAudios).forEach(([name, a]) => {
+      a.pause();
+      a.currentTime = 0;
+      a.volume = stemEnabled[name] ? vol : 0;
+      a.play().catch(e => console.warn('Stem play blocked:', e));
+    });
+
+    isBackingPlaying = true;
+    document.getElementById('play-backing-btn').style.display  = 'none';
+    document.getElementById('pause-backing-btn').style.display = 'inline-flex';
+    backingStartedByRecording = true;
+    startLyricSync();
+  }
+
+  /* ── Step 3: open microphone ── */
+  let stream;
+  try { stream = await initAudioPipeline(); }
+  catch(err) {
+    showToast('Microphone error: ' + err.message, 'error');
+    if (backingStartedByRecording) { stopBacking(); backingStartedByRecording = false; }
+    return;
+  }
+
+  /* ── Step 4: start MediaRecorder ── */
+  audioChunks  = [];
+  const mime   = getSupportedMime();
+  mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+  mediaRecorder.ondataavailable = e => { if (e.data.size) audioChunks.push(e.data); };
+  mediaRecorder.onstop = onRecordingStopped;
+  mediaRecorder.start(100);
+
+  recStartTime = Date.now();
+  pausedElapsed = 0;
+  recTimerInterval = setInterval(tickRecTimer, 50);
+  setRecState('recording');
+  showToast('Recording…', 'success');
+}
+
+function getSupportedMime() {
+  for (const t of ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg'])
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  return '';
+}
+
+function pauseRecording() {
+  if (!mediaRecorder) return;
+  if (mediaRecorder.state === 'recording') {
+    mediaRecorder.pause();
+    pausedElapsed += Date.now() - recStartTime;
+    clearInterval(recTimerInterval);
+    if (backingStartedByRecording && isBackingPlaying) pauseBacking();
+    setRecState('paused');
+  } else if (mediaRecorder.state === 'paused') {
+    mediaRecorder.resume();
+    recStartTime = Date.now();
+    recTimerInterval = setInterval(tickRecTimer, 50);
+    if (backingStartedByRecording && !isBackingPlaying) playBacking();
+    setRecState('recording');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    clearInterval(recTimerInterval);
+  }
+  if (backingStartedByRecording) {
+    stopBacking();
+    backingStartedByRecording = false;
+  }
+}
+
+function onRecordingStopped() {
+  recordedBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
+  recordedUrl  = URL.createObjectURL(recordedBlob);
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); }
+  setRecState('stopped');
+  showToast('Recording complete!', 'success');
+  const dur = document.getElementById('recording-timer').textContent;
+  takes.push({ blob: recordedBlob, url: recordedUrl, duration: dur });
+  renderTakes();
+}
+
+function playRecording() { if (recordedUrl) new Audio(recordedUrl).play(); }
+
+async function saveRecording() {
+  if (!recordedBlob) { showToast('Nothing to save', 'warning'); return; }
+  showToast('Saving…', 'info');
+  const fd = new FormData();
+  fd.append('recording', recordedBlob, 'recording.webm');
+  try {
+    const resp = await fetch(`/api/save-recording/${projectId}`, { method:'POST', body:fd });
+    const data = await resp.json();
+    if (data.success) {
+      showToast('Recording saved!', 'success');
+      document.getElementById('compare-btn').style.display = 'inline-flex';
+    } else {
+      showToast('Save failed: ' + (data.error || 'unknown'), 'error');
+    }
+  } catch(err) { showToast('Error: ' + err.message, 'error'); }
+}
+
+function discardRecording() {
+  recordedBlob = null; recordedUrl = null; audioChunks = [];
+  setRecState('idle');
+  showToast('Recording discarded', 'info');
+}
+
+function setRecState(state) {
+  const sh = (id, v) => { const el=document.getElementById(id); if(el) el.style.display = v ? 'inline-flex' : 'none'; };
+  sh('record-btn',      state==='idle');
+  sh('pause-rec-btn',   state==='recording'||state==='paused');
+  sh('stop-rec-btn',    state==='recording'||state==='paused');
+  sh('play-rec-btn',    state==='stopped');
+  sh('save-rec-btn',    state==='stopped');
+  sh('discard-rec-btn', state==='stopped');
+  const ind = document.getElementById('recording-indicator');
+  const map = { idle:{text:'Ready to Record',cls:''}, recording:{text:'Recording…',cls:'recording'},
+                paused:{text:'Paused',cls:'paused'}, stopped:{text:'Recording Complete',cls:'done'} };
+  const s = map[state]||map.idle;
+  ind.querySelector('.status-text').textContent = s.text;
+  ind.className = 'status-indicator ' + s.cls;
+  const pb = document.getElementById('pause-rec-btn');
+  if (pb) pb.querySelector('span').textContent = state==='paused' ? 'Resume' : 'Pause';
+}
+
+function tickRecTimer() {
+  const elapsed = pausedElapsed + (Date.now() - (recStartTime||Date.now()));
+  const s  = Math.floor(elapsed/1000);
+  const cs = Math.floor((elapsed%1000)/10);
+  document.getElementById('recording-timer').textContent =
+    `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
+}
+
+/* ── Count-in ── */
+function doCountIn(beats) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('countin-overlay');
+    const numEl   = document.getElementById('countin-number');
+    overlay.style.display = 'flex';
+    overlay.classList.remove('countin-hide');
+
+    // Reset all dots
+    for (let d = 1; d <= beats; d++) {
+      const dot = document.getElementById(`cdot-${d}`);
+      if (dot) dot.classList.remove('active');
+    }
+
+    function showBeat(n) {
+      if (n === 0) {
+        numEl.textContent = 'GO!';
+        numEl.classList.remove('pop');
+        void numEl.offsetWidth;
+        numEl.classList.add('pop', 'go');
+        setTimeout(() => {
+          overlay.classList.add('countin-hide');
+          setTimeout(() => {
+            overlay.style.display = 'none';
+            numEl.classList.remove('go');
+          }, 400);
+          resolve();
+        }, 800);
+        return;
+      }
+      numEl.textContent = n;
+      numEl.classList.remove('pop');
+      void numEl.offsetWidth;
+      numEl.classList.add('pop');
+      const dot = document.getElementById(`cdot-${n}`);
+      if (dot) dot.classList.add('active');
+      setTimeout(() => showBeat(n - 1), 1000);
+    }
+
+    showBeat(beats);
+  });
+}
+
+/* =====================================================
+   TAKES LIST
+   ===================================================== */
+function renderTakes() {
+  const sec  = document.getElementById('takes-section');
+  const list = document.getElementById('takes-list');
+  if (!takes.length) { sec.style.display='none'; return; }
+  sec.style.display = '';
+  list.innerHTML = takes.map((t,i) => `
+    <div class="take-item">
+      <span class="take-number">Take ${i+1}</span>
+      <span class="take-duration">${t.duration}</span>
+      <div class="take-actions">
+        <button class="btn-icon" onclick="playTake(${i})" title="Play"><i class="fas fa-play"></i></button>
+        <button class="btn-icon" onclick="useTake(${i})" title="Use this take"><i class="fas fa-check"></i></button>
+        <button class="btn-icon" onclick="deleteTake(${i})" title="Delete"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`).join('');
+}
+function playTake(i)   { new Audio(takes[i].url).play(); }
+function useTake(i)    { recordedBlob=takes[i].blob; recordedUrl=takes[i].url; setRecState('stopped'); showToast(`Using Take ${i+1}`,'success'); }
+function deleteTake(i) { takes.splice(i,1); renderTakes(); }
+
+/* =====================================================
+   LYRICS
+   ===================================================== */
+function loadSavedLyrics() {
+  const saved = localStorage.getItem(`lyrics_${projectId}`);
+  if (saved) {
+    document.getElementById('lyrics-editor').value = saved;
+    parseLyrics(saved);
+    // If lyrics exist, show display instead of editor
+    document.getElementById('lyrics-editor').style.display = 'none';
+    lyricsEditorOpen = false;
+    document.getElementById('edit-lyrics-btn').querySelector('i').className = 'fas fa-edit';
+  }
+}
+
+function parseLyrics(text) {
+  lyricsLines = text.trim().split('\n');
+  renderLyricsDisplay();
+}
+
+function renderLyricsDisplay() {
+  const el = document.getElementById('lyrics-display');
+  if (!lyricsLines.length || (lyricsLines.length===1 && !lyricsLines[0].trim())) {
+    el.innerHTML = '<div class="lyrics-placeholder"><i class="fas fa-music"></i><p>Paste lyrics in the editor below</p></div>';
+    return;
+  }
+  el.innerHTML = lyricsLines.map((line,i) =>
+    `<div class="lyrics-line" id="lyric-${i}">${line||'&nbsp;'}</div>`).join('');
+}
+
+function startLyricSync() {
+  if (lyricAnimId) cancelAnimationFrame(lyricAnimId);
+  function tick() {
+    lyricAnimId = requestAnimationFrame(tick);
+    if (!isBackingPlaying) return;
+    const ref = getFirstAudio();
+    if (!ref || !lyricsLines.length) return;
+    const prog = ref.currentTime / (ref.duration||1);
+    const idx  = Math.min(Math.floor(prog * lyricsLines.length), lyricsLines.length-1);
+    if (idx !== currentLyricIdx) {
+      currentLyricIdx = idx;
+      document.querySelectorAll('.lyrics-line.active').forEach(el => el.classList.remove('active'));
+      const al = document.getElementById(`lyric-${idx}`);
+      if (al) {
+        al.classList.add('active');
+        if (document.getElementById('auto-scroll').checked)
+          al.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+    }
+  }
+  tick();
+}
+
+/* =====================================================
+   PRESETS
+   ===================================================== */
+const PRESETS = {
+  classic: { reverb:20, echo:10, gain:100 },
+  concert: { reverb:70, echo:30, gain:120 },
+  studio:  { reverb:10, echo: 5, gain:110 },
+};
+function applyPreset(name) {
+  const p = PRESETS[name]; if (!p) return;
+  document.getElementById('reverb-slider').value  = p.reverb;
+  document.getElementById('echo-slider').value    = p.echo;
+  document.getElementById('mic-gain').value       = p.gain;
+  document.getElementById('reverb-value').textContent   = p.reverb + '%';
+  document.getElementById('echo-value').textContent     = p.echo   + '%';
+  document.getElementById('mic-gain-display').textContent = p.gain + '%';
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', b.dataset.preset===name));
+  updateEffects();
+  if (gainNode) gainNode.gain.value = p.gain/100;
+  showToast(`"${name}" preset applied`, 'success');
+}
+
+/* =====================================================
+   BIND CONTROLS
+   ===================================================== */
+function bindAllControls() {
+  // Backing
+  document.getElementById('play-backing-btn').addEventListener('click', playBacking);
+  document.getElementById('pause-backing-btn').addEventListener('click', pauseBacking);
+  document.getElementById('stop-backing-btn').addEventListener('click', stopBacking);
+  document.getElementById('backing-volume').addEventListener('input', function() {
+    document.getElementById('backing-vol-display').textContent = this.value + '%';
+    updateStemVolumes();
+  });
+  document.getElementById('backing-seek').addEventListener('input', function() {
+    const t = parseInt(this.value);
+    Object.values(backingAudios).forEach(a => a.currentTime = t);
+    document.getElementById('backing-time').textContent = fmtTime(t);
+  });
+
+  // Recording
+  document.getElementById('record-btn').addEventListener('click', startRecording);
+  document.getElementById('pause-rec-btn').addEventListener('click', pauseRecording);
+  document.getElementById('stop-rec-btn').addEventListener('click', stopRecording);
+  document.getElementById('play-rec-btn').addEventListener('click', playRecording);
+  document.getElementById('save-rec-btn').addEventListener('click', saveRecording);
+  document.getElementById('discard-rec-btn').addEventListener('click', discardRecording);
+
+  // Mic
+  document.getElementById('refresh-mics').addEventListener('click', enumerateMics);
+  document.getElementById('mic-gain').addEventListener('input', function() {
+    document.getElementById('mic-gain-display').textContent = this.value + '%';
+    if (gainNode) gainNode.gain.value = this.value/100;
+  });
+  document.getElementById('monitor-enable').addEventListener('change', function() {
+    if (monitorGain) monitorGain.gain.value = this.checked ? 0.7 : 0;
+  });
+
+  // Effects
+  document.getElementById('reverb-slider').addEventListener('input', function() {
+    document.getElementById('reverb-value').textContent = this.value + '%'; updateEffects();
+  });
+  document.getElementById('echo-slider').addEventListener('input', function() {
+    document.getElementById('echo-value').textContent = this.value + '%'; updateEffects();
+  });
+  document.getElementById('autotune-slider').addEventListener('input', function() {
+    document.getElementById('autotune-value').textContent = +this.value>0 ? this.value+'%' : 'Off';
+  });
+
+  // Presets
+  document.querySelectorAll('.preset-btn').forEach(btn =>
+    btn.addEventListener('click', () => applyPreset(btn.dataset.preset)));
+
+  // Lyrics
+  const editor  = document.getElementById('lyrics-editor');
+  const editBtn = document.getElementById('edit-lyrics-btn');
+  editor.addEventListener('input', function() {
+    localStorage.setItem(`lyrics_${projectId}`, this.value);
+    parseLyrics(this.value);
+  });
+  editBtn.addEventListener('click', function() {
+    lyricsEditorOpen = !lyricsEditorOpen;
+    editor.style.display = lyricsEditorOpen ? '' : 'none';
+    document.getElementById('lyrics-display').style.display = lyricsEditorOpen ? 'none' : '';
+    editBtn.querySelector('i').className = lyricsEditorOpen ? 'fas fa-eye-slash' : 'fas fa-edit';
+    editBtn.title = lyricsEditorOpen ? 'Hide Editor' : 'Edit Lyrics';
+  });
+  // Initially show display if lyrics exist, else show editor
+  if (!localStorage.getItem(`lyrics_${projectId}`)) {
+    document.getElementById('lyrics-display').style.display = 'none';
+    editor.style.display = '';
+    lyricsEditorOpen = true;
+  } else {
+    editor.style.display = 'none';
+    document.getElementById('lyrics-display').style.display = '';
+    lyricsEditorOpen = false;
+  }
+
+  document.getElementById('font-size-select').addEventListener('change', function() {
+    const map = { small:'14px', medium:'18px', large:'24px', xlarge:'32px' };
+    document.getElementById('lyrics-display').style.fontSize = map[this.value]||'18px';
+  });
+}
+
+/* =====================================================
+   TOAST
+   ===================================================== */
+function showToast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 350); }, 2800);
+}
+</script>
+{% endblock %}

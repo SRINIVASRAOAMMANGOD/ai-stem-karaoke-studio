@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - AI STEM Karaoke Studio{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="hero-section">
+        <h1>AI STEM Karaoke Studio</h1>
+        <p class="subtitle">Upload your audio file to separate stems using AI-powered Demucs technology</p>
+    </div>
+
+    <!-- Upload Section -->
+    {% include 'components/upload_section.html' %}
+    
+    <!-- Progress Bar -->
+    <section class="progress-section" id="progress-section" style="display: none;">
+        <div class="progress-container">
+            <div class="progress-header">
+                <h3 id="progress-title">Processing Audio...</h3>
+                <span id="progress-percentage">0%</span>
+            </div>
+            
+            <div class="progress-bar-wrapper">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </div>
+            
+            <div class="progress-status">
+                <p id="progress-message">Initializing...</p>
+                <div class="progress-steps">
+                    <div class="step" data-step="upload">
+                        <i class="fas fa-upload"></i>
+                        <span>Upload</span>
+                    </div>
+                    <div class="step" data-step="separate">
+                        <i class="fas fa-magic"></i>
+                        <span>Separate</span>
+                    </div>
+                    <div class="step" data-step="process">
+                        <i class="fas fa-cog"></i>
+                        <span>Process</span>
+                    </div>
+                    <div class="step" data-step="complete">
+                        <i class="fas fa-check"></i>
+                        <span>Complete</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}{% endblock %}

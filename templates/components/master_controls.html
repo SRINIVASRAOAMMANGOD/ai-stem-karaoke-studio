@@ -1,0 +1,78 @@
+<section class="master-controls-section" id="master-controls-section" style="display: none;">
+    <div class="master-controls-container">
+        <h3><i class="fas fa-sliders-h"></i> Master Controls</h3>
+
+        <div class="master-controls-grid">
+
+            <!-- Playback Controls -->
+            <div class="control-panel playback-panel">
+                <div class="panel-label"><i class="fas fa-play-circle"></i> Playback</div>
+                <div class="playback-buttons">
+                    <button class="btn-control" id="play-btn" title="Play"><i class="fas fa-play"></i></button>
+                    <button class="btn-control" id="pause-btn" style="display:none;" title="Pause"><i class="fas fa-pause"></i></button>
+                    <button class="btn-control" id="stop-btn" title="Stop"><i class="fas fa-stop"></i></button>
+                    <button class="btn-control" id="rewind-btn" title="Rewind"><i class="fas fa-backward"></i></button>
+                    <button class="btn-control" id="forward-btn" title="Forward"><i class="fas fa-forward"></i></button>
+                    <button class="btn-control" id="loop-btn" title="Loop"><i class="fas fa-redo"></i></button>
+                </div>
+            </div>
+
+            <!-- Master Volume with live VU meter -->
+            <div class="control-panel volume-panel">
+                <div class="panel-label"><i class="fas fa-volume-up"></i> Master Volume</div>
+                <div class="volume-control">
+                    <i class="fas fa-volume-down vol-icon"></i>
+                    <input type="range" id="master-volume" min="0" max="100" value="80">
+                    <i class="fas fa-volume-up vol-icon"></i>
+                    <span class="volume-value">80%</span>
+                </div>
+                <div class="vu-meter-wrap">
+                    <div class="vu-channel">
+                        <span class="vu-label">L</span>
+                        <div class="vu-track"><div class="vu-fill" id="vu-left"></div></div>
+                        <span class="vu-db" id="vu-left-db">–∞</span>
+                    </div>
+                    <div class="vu-channel">
+                        <span class="vu-label">R</span>
+                        <div class="vu-track"><div class="vu-fill" id="vu-right"></div></div>
+                        <span class="vu-db" id="vu-right-db">–∞</span>
+                    </div>
+                </div>
+                <div class="vu-scale">
+                    <span>-60</span><span>-40</span><span>-20</span><span>-12</span><span>-6</span><span>0</span>
+                </div>
+            </div>
+
+            <!-- Tempo Control -->
+            <div class="control-panel tempo-panel">
+                <div class="panel-label"><i class="fas fa-tachometer-alt"></i> Tempo</div>
+                <div class="tempo-control">
+                    <button class="btn-icon" id="tempo-down"><i class="fas fa-minus"></i></button>
+                    <div class="tempo-display">
+                        <span id="tempo-value">100</span>
+                        <span class="tempo-unit">%</span>
+                    </div>
+                    <button class="btn-icon" id="tempo-up"><i class="fas fa-plus"></i></button>
+                </div>
+                <input type="range" id="tempo-slider" min="50" max="150" value="100" step="1">
+                <button class="btn-reset" id="tempo-reset"><i class="fas fa-undo"></i> Reset</button>
+            </div>
+
+            <!-- Pitch Control -->
+            <div class="control-panel pitch-panel">
+                <div class="panel-label"><i class="fas fa-music"></i> Pitch</div>
+                <div class="pitch-control">
+                    <button class="btn-icon" id="pitch-down"><i class="fas fa-minus"></i></button>
+                    <div class="pitch-display">
+                        <span id="pitch-value">0</span>
+                        <span class="pitch-unit">semitones</span>
+                    </div>
+                    <button class="btn-icon" id="pitch-up"><i class="fas fa-plus"></i></button>
+                </div>
+                <input type="range" id="pitch-slider" min="-12" max="12" value="0" step="1">
+                <button class="btn-reset" id="pitch-reset"><i class="fas fa-undo"></i> Reset</button>
+            </div>
+
+        </div><!-- /master-controls-grid -->
+    </div>
+</section>
