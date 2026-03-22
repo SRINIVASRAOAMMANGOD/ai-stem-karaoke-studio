@@ -32,7 +32,7 @@ DEFAULT_SETTINGS = {
     'use_gpu':         True,
     'auto_cleanup':    True,
     'theme':           'dark',
-    'accent_color':    '#6366f1',
+    'accent_color':    '#0f766e',
     'waveform_colors': 'default',
     'show_animations': True,
     'compact_mode':    False,
@@ -367,9 +367,36 @@ def save_recording(project_id):
         if not os.path.exists(project_folder):
             return jsonify({'success': False, 'error': 'Project not found'}), 404
         
-        # Save recording
+        # Save upload to a temp file, then normalize to WAV for downstream mixing/analysis.
+        import subprocess
+        import shutil
+
+        original_name = secure_filename(recording.filename) or 'recording.webm'
+        _, ext = os.path.splitext(original_name)
+        ext = ext.lower() if ext else '.webm'
+        uploaded_path = os.path.join(project_folder, f'recording_upload{ext}')
         recording_path = os.path.join(project_folder, 'recording.wav')
-        recording.save(recording_path)
+
+        recording.save(uploaded_path)
+
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', uploaded_path,
+            '-ac', '1',
+            '-ar', '44100',
+            '-c:a', 'pcm_s16le',
+            recording_path,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            # Fallback to raw upload if conversion fails, so recording isn't lost.
+            shutil.copy2(uploaded_path, recording_path)
+
+        try:
+            if os.path.exists(uploaded_path):
+                os.remove(uploaded_path)
+        except OSError:
+            pass
         
         # Update metadata
         project = load_project(project_id)
@@ -398,6 +425,8 @@ def api_save_settings():
         data = request.get_json(silent=True) or {}
         current = load_settings()
         current.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
+        # Keep accent fixed for consistent brand color across the app.
+        current['accent_color'] = DEFAULT_SETTINGS['accent_color']
         save_settings_to_disk(current)
         return jsonify({'success': True, 'settings': current})
     except Exception as e:
@@ -476,6 +505,77 @@ def project_requirements(project_id):
             'vocal_url': vocal_url,
             'recording_url': recording_url,
         })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/export-karaoke/<project_id>', methods=['GET'])
+@app.route('/api/download-karaoke/<project_id>', methods=['GET'])
+def export_karaoke(project_id):
+    """Create a downloadable karaoke mix: backing stems + user recording."""
+    try:
+        import subprocess
+
+        project = load_project(project_id)
+        if not project:
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
+
+        recording_path = os.path.join(PROJECTS_FOLDER, project_id, 'recording.wav')
+        if not os.path.exists(recording_path):
+            return jsonify({'success': False, 'error': 'Recording not found. Save your recording first.'}), 400
+
+        stems_folder = project.get('stems_folder', '')
+        if not stems_folder or not os.path.exists(stems_folder):
+            return jsonify({'success': False, 'error': 'Stems not found for this project.'}), 400
+
+        # Build backing from all non-vocal stems (karaoke backing track)
+        backing_stems = []
+        for f in os.listdir(stems_folder):
+            if f.endswith('.wav') and not f.lower().startswith('vocals'):
+                backing_stems.append(os.path.join(stems_folder, f))
+
+        if not backing_stems:
+            return jsonify({'success': False, 'error': 'No non-vocal stems available for karaoke backing.'}), 400
+
+        exports_dir = os.path.join(PROJECTS_FOLDER, project_id, 'exports')
+        os.makedirs(exports_dir, exist_ok=True)
+
+        backing_mix_path = os.path.join(exports_dir, 'karaoke_backing.wav')
+        final_mix_path   = os.path.join(exports_dir, 'karaoke_with_user_vocals.wav')
+
+        # 1) Mix backing stems into one track
+        if len(backing_stems) == 1:
+            import shutil
+            shutil.copy2(backing_stems[0], backing_mix_path)
+        else:
+            cmd = ['ffmpeg', '-y']
+            for stem in backing_stems:
+                cmd += ['-i', stem]
+            cmd += [
+                '-filter_complex', f'amix=inputs={len(backing_stems)}:normalize=0:duration=longest',
+                '-c:a', 'pcm_s16le',
+                backing_mix_path,
+            ]
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            if proc.returncode != 0:
+                return jsonify({'success': False, 'error': f'Failed to create backing mix: {proc.stderr[:300]}'}), 500
+
+        # 2) Mix backing + user vocal recording into final downloadable file
+        cmd2 = [
+            'ffmpeg', '-y',
+            '-i', backing_mix_path,
+            '-i', recording_path,
+            '-filter_complex', 'amix=inputs=2:normalize=0:duration=longest',
+            '-c:a', 'pcm_s16le',
+            final_mix_path,
+        ]
+        proc2 = subprocess.run(cmd2, capture_output=True, text=True)
+        if proc2.returncode != 0:
+            return jsonify({'success': False, 'error': f'Failed to create final karaoke mix: {proc2.stderr[:300]}'}), 500
+
+        file_url = f'/files/projects/{project_id}/exports/karaoke_with_user_vocals.wav'
+        return jsonify({'success': True, 'file_url': file_url, 'filename': 'karaoke_with_user_vocals.wav'})
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

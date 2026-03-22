@@ -12,9 +12,13 @@
         <i class="fas fa-sliders-h"></i> Mixer
       </a>
       <a href="{{ url_for('compare', project_id=project.id) }}" class="btn btn-primary"
-         id="compare-btn" style="display:none;">
+         id="compare-btn" style="display:{{ 'inline-flex' if project.has_recording else 'none' }};">
         <i class="fas fa-compress-arrows-alt"></i> Compare Recording
       </a>
+      <button class="btn btn-secondary" id="download-karaoke-btn" type="button"
+              style="display:{{ 'inline-flex' if project.has_recording else 'none' }};">
+        <i class="fas fa-download"></i> Download Karaoke Track
+      </button>
     </div>
   </div>
 
@@ -33,6 +37,7 @@
     </div>
     <div id="backing-ready" style="display:none;">
       <div class="stem-toggles" id="stem-toggles"></div>
+      <div id="stem-downloads" style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 1rem;"></div>
       <div class="backing-transport">
         <button class="btn-rec" id="play-backing-btn"><i class="fas fa-play"></i><span>Play</span></button>
         <button class="btn-rec" id="pause-backing-btn" style="display:none;"><i class="fas fa-pause"></i><span>Pause</span></button>
@@ -102,9 +107,9 @@
           </div>
         </div>
         <div class="presets-row">
-          <button class="btn btn-secondary preset-btn" data-preset="classic"><i class="fas fa-music"></i> Classic</button>
-          <button class="btn btn-secondary preset-btn" data-preset="concert"><i class="fas fa-guitar"></i> Concert</button>
-          <button class="btn btn-secondary preset-btn" data-preset="studio"><i class="fas fa-microphone"></i> Studio</button>
+          <button class="btn btn-secondary preset-btn" data-preset="classic" type="button" onclick="applyPreset('classic')"><i class="fas fa-music"></i> Classic</button>
+          <button class="btn btn-secondary preset-btn" data-preset="concert" type="button" onclick="applyPreset('concert')"><i class="fas fa-guitar"></i> Concert</button>
+          <button class="btn btn-secondary preset-btn" data-preset="studio" type="button" onclick="applyPreset('studio')"><i class="fas fa-microphone"></i> Studio</button>
         </div>
       </section>
 
@@ -144,7 +149,7 @@
           <div class="recording-timer" id="recording-timer">00:00.00</div>
         </div>
         <div class="rec-buttons">
-          <button class="btn-rec btn-rec-record" id="record-btn"><i class="fas fa-circle"></i><span>Record</span></button>
+          <button class="btn-rec btn-rec-record" id="record-btn" type="button" onclick="window.__startRecordingFromHtml && window.__startRecordingFromHtml(event)"><i class="fas fa-circle"></i><span>Record</span></button>
           <button class="btn-rec" id="pause-rec-btn" style="display:none;"><i class="fas fa-pause"></i><span>Pause</span></button>
           <button class="btn-rec" id="stop-rec-btn" style="display:none;"><i class="fas fa-stop"></i><span>Stop</span></button>
           <button class="btn-rec" id="play-rec-btn" style="display:none;"><i class="fas fa-play"></i><span>Play</span></button>
@@ -160,6 +165,16 @@
   <section class="karaoke-section takes-section" id="takes-section" style="display:none;">
     <div class="section-title"><i class="fas fa-list"></i> Recorded Takes</div>
     <div class="takes-list" id="takes-list"></div>
+  </section>
+
+  <section class="karaoke-section" id="saved-recording-section" style="display:none; margin-top:1rem;">
+    <div class="section-title"><i class="fas fa-history"></i> Last Saved Recording</div>
+    <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+      <audio id="saved-recording-audio" controls preload="metadata" style="width:min(560px,100%);"></audio>
+      <a id="saved-recording-download" class="btn btn-secondary" href="#" download>
+        <i class="fas fa-download"></i> Download Saved Vocal
+      </a>
+    </div>
   </section>
 
   <div style="height:2rem;"></div>
@@ -188,6 +203,7 @@
    KARAOKE PAGE – FULL IMPLEMENTATION
    ===================================================== */
 const projectId = '{{ project.id }}';
+const existingRecordingUrl = {{ ('"/files/projects/' ~ project.id ~ '/recording.wav"') if project.has_recording else 'null' }};
 
 /* ── State ── */
 let backingAudios    = {};   // { stemName: HTMLAudioElement }
@@ -218,6 +234,8 @@ let recTimerInterval = null;
 let pausedElapsed    = 0;
 let takes            = [];
 let backingStartedByRecording = false;
+let isStartingRecording = false;
+let usingRawMicFallback = false;
 
 let lyricsLines      = [];
 let currentLyricIdx  = -1;
@@ -228,44 +246,82 @@ let lyricsEditorOpen = true;
    INIT
    ===================================================== */
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadStems();
-  await enumerateMics();
   bindAllControls();
+  // Extra-safe trigger path: delegated click handler for dynamically re-rendered buttons.
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('#record-btn') : null;
+    if (!btn) return;
+    startRecording().catch(err => console.error('record click failed:', err));
+  });
+  window.__startRecordingFromHtml = () => {
+    startRecording().catch(err => console.error('record inline failed:', err));
+  };
+  // Bind controls first so Record responds immediately even if loading is slow.
+  loadStems().catch(err => console.warn('loadStems failed:', err));
+  enumerateMics().catch(err => console.warn('enumerateMics failed:', err));
   loadSavedLyrics();
+  initExistingRecording();
 });
+
+function initExistingRecording() {
+  if (!existingRecordingUrl) return;
+  refreshSavedRecordingPanel(existingRecordingUrl);
+  // Existing saved recording is shown in the history panel, but recording controls
+  // must start in a fresh idle state for a new take.
+  recordedBlob = null;
+  recordedUrl = null;
+  setRecState('idle');
+  document.getElementById('compare-btn').style.display = 'inline-flex';
+  document.getElementById('download-karaoke-btn').style.display = 'inline-flex';
+}
+
+function refreshSavedRecordingPanel(url) {
+  const section = document.getElementById('saved-recording-section');
+  const audio = document.getElementById('saved-recording-audio');
+  const dl = document.getElementById('saved-recording-download');
+  if (!section || !audio || !dl || !url) return;
+
+  const stamped = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+  audio.src = stamped;
+  dl.href = stamped;
+  section.style.display = 'block';
+}
 
 
 /* =====================================================
    BACKING TRACK
    ===================================================== */
 async function loadStems() {
+  console.log(`[Stems] Fetching stems for project: ${projectId}`);
   try {
     const resp = await fetch(`/api/stems/${projectId}`);
     const data = await resp.json();
-    if (!data.success || !data.stems || !Object.keys(data.stems).length) {
+    
+    if (!data.success || !data.stems) {
       document.getElementById('backing-loading').innerHTML =
-        '<i class="fas fa-exclamation-circle"></i> No stems found for this project.';
+        '<i class="fas fa-exclamation-circle"></i> No stems found.';
       return;
     }
 
     const togglesEl = document.getElementById('stem-toggles');
+    const downloadsEl = document.getElementById('stem-downloads');
+    
+    console.log(`[Stems] Got ${Object.keys(data.stems).length} stems`);
 
-    // API returns stems as { name: url, ... } — convert to iterable entries
+    // Create all audio elements WITHOUT waiting for load
     Object.entries(data.stems).forEach(([stemName, stemUrl]) => {
       const audio = document.createElement('audio');
       audio.src = stemUrl;
       audio.crossOrigin = 'anonymous';
       audio.preload = 'auto';
       audio.style.display = 'none';
-      document.body.appendChild(audio); // attaching to DOM makes autoplay policy happy
+      document.body.appendChild(audio);
 
       const isVocal = /vocal/i.test(stemName);
       stemEnabled[stemName] = !isVocal;
-      audio.volume = stemEnabled[stemName] ? 0.8 : 0;
       backingAudios[stemName] = audio;
-
-      audio.addEventListener('loadedmetadata', updateDurationDisplay);
-      audio.addEventListener('ended', onBackingEnded);
+      
+      console.log(`[Stems] Added: ${stemName}`);
 
       // Chip toggle
       const chip = document.createElement('label');
@@ -278,21 +334,38 @@ async function loadStems() {
         updateStemVolumes();
       });
       togglesEl.appendChild(chip);
+
+      // Per-stem download button
+      if (downloadsEl) {
+        const a = document.createElement('a');
+        a.className = 'btn btn-secondary';
+        a.href = stemUrl;
+        a.download = `${stemName}.wav`;
+        a.style.padding = '.35rem .75rem';
+        a.style.fontSize = '.8rem';
+        a.innerHTML = `<i class="fas fa-download"></i> ${stemName}`;
+        downloadsEl.appendChild(a);
+      }
+
+      // Update duration when metadata loads
+      audio.addEventListener('loadedmetadata', () => {
+        console.log(`[Stems] Loaded: ${stemName} (${audio.duration}s)`);
+        updateDurationDisplay();
+      });
     });
 
+    // Show UI immediately - don't wait for audio to load
+    console.log(`[Stems] ✓ Showing UI controls`);
     document.getElementById('backing-loading').style.display = 'none';
-    document.getElementById('backing-ready').style.display  = '';
+    document.getElementById('backing-ready').style.display = '';
     startSeekbar();
-
-    // Show info banner and register a capture-phase one-time click listener.
-    // Capture fires BEFORE any element's own click handler, so audio is always
-    // unlocked before startRecording() calls a.play().
     document.getElementById('audio-unlock-banner').style.display = 'flex';
     document.addEventListener('click', activateAudio, { once: true, capture: true });
 
   } catch(err) {
+    console.error(`[Stems] ERROR:`, err);
     document.getElementById('backing-loading').innerHTML =
-      '<i class="fas fa-exclamation-circle"></i> Could not load stems: ' + err.message;
+      '<i class="fas fa-exclamation-circle"></i> Error: ' + err.message;
   }
 }
 
@@ -533,6 +606,18 @@ function updateEffects() {
    RECORDING
    ===================================================== */
 async function startRecording() {
+  if (mediaRecorder && mediaRecorder.state && mediaRecorder.state !== 'inactive') return;
+  if (isStartingRecording) return;
+  isStartingRecording = true;
+
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Microphone is not supported in this browser. Use latest Chrome/Edge.');
+    }
+    if (typeof MediaRecorder === 'undefined') {
+      throw new Error('Recording API is unavailable in this browser. Use latest Chrome/Edge.');
+    }
+
   const hasBacking  = Object.keys(backingAudios).length > 0;
   const willPlay    = hasBacking && document.getElementById('play-backing-while-recording').checked;
 
@@ -579,18 +664,33 @@ async function startRecording() {
   }
 
   /* ── Step 3: open microphone ── */
+  usingRawMicFallback = false;
   let stream;
   try { stream = await initAudioPipeline(); }
   catch(err) {
-    showToast('Microphone error: ' + err.message, 'error');
-    if (backingStartedByRecording) { stopBacking(); backingStartedByRecording = false; }
-    return;
+    // Fallback method: bypass effects graph and record raw microphone input.
+    try {
+      if (micStream) { micStream.getTracks().forEach(t => t.stop()); }
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = micStream;
+      usingRawMicFallback = true;
+      showToast('Using fallback recording mode (raw mic).', 'warning');
+    } catch (fallbackErr) {
+      showToast('Microphone error: ' + (fallbackErr.message || err.message), 'error');
+      if (backingStartedByRecording) { stopBacking(); backingStartedByRecording = false; }
+      return;
+    }
   }
 
   /* ── Step 4: start MediaRecorder ── */
   audioChunks  = [];
   const mime   = getSupportedMime();
-  mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+  try {
+    mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+  } catch (e) {
+    // Fallback: some browsers reject codec-constrained init; retry without mimeType.
+    mediaRecorder = new MediaRecorder(stream);
+  }
   mediaRecorder.ondataavailable = e => { if (e.data.size) audioChunks.push(e.data); };
   mediaRecorder.onstop = onRecordingStopped;
   mediaRecorder.start(100);
@@ -600,6 +700,21 @@ async function startRecording() {
   recTimerInterval = setInterval(tickRecTimer, 50);
   setRecState('recording');
   showToast('Recording…', 'success');
+  } catch (err) {
+    const ind = document.getElementById('recording-indicator');
+    if (ind) {
+      const t = ind.querySelector('.status-text');
+      if (t) t.textContent = 'Record failed: check mic permission/device';
+      ind.className = 'status-indicator paused';
+    }
+    showToast('Record failed: ' + (err.message || err), 'error');
+    if (backingStartedByRecording) {
+      stopBacking();
+      backingStartedByRecording = false;
+    }
+  } finally {
+    isStartingRecording = false;
+  }
 }
 
 function getSupportedMime() {
@@ -640,6 +755,26 @@ function onRecordingStopped() {
   recordedBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
   recordedUrl  = URL.createObjectURL(recordedBlob);
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); }
+  micStream = null;
+  mediaRecorder = null;
+  audioChunks = [];
+  clearInterval(recTimerInterval);
+  recTimerInterval = null;
+  // If we were in fallback mode, drop processing nodes so next take can re-init cleanly.
+  if (usingRawMicFallback) {
+    if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(()=>{});
+    audioCtx = null;
+    gainNode = null;
+    analyserNode = null;
+    reverbNode = null;
+    reverbMixNode = null;
+    delayNode = null;
+    delayFeedback = null;
+    delayMixNode = null;
+    monitorGain = null;
+    effectsDest = null;
+    usingRawMicFallback = false;
+  }
   setRecState('stopped');
   showToast('Recording complete!', 'success');
   const dur = document.getElementById('recording-timer').textContent;
@@ -660,10 +795,47 @@ async function saveRecording() {
     if (data.success) {
       showToast('Recording saved!', 'success');
       document.getElementById('compare-btn').style.display = 'inline-flex';
+      document.getElementById('download-karaoke-btn').style.display = 'inline-flex';
+      const savedUrl = `/files/projects/${projectId}/recording.wav`;
+      refreshSavedRecordingPanel(savedUrl);
+      recordedUrl = savedUrl;
+      // Make re-record available immediately after save.
+      setRecState('idle');
     } else {
       showToast('Save failed: ' + (data.error || 'unknown'), 'error');
     }
   } catch(err) { showToast('Error: ' + err.message, 'error'); }
+}
+
+async function downloadKaraokeTrack() {
+  const btn = document.getElementById('download-karaoke-btn');
+  if (!btn) return;
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing…';
+  showToast('Preparing karaoke download…', 'info');
+  try {
+    let resp = await fetch(`/api/export-karaoke/${projectId}`);
+    if (resp.status === 404) {
+      // Backward-compatible endpoint alias.
+      resp = await fetch(`/api/download-karaoke/${projectId}`);
+    }
+    const data = await resp.json();
+    if (!data.success) throw new Error(data.error || 'Export failed');
+
+    const a = document.createElement('a');
+    a.href = data.file_url;
+    a.download = data.filename || `karaoke_${projectId}.wav`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('Download started!', 'success');
+  } catch (err) {
+    showToast('Download failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
 }
 
 function discardRecording() {
@@ -674,7 +846,7 @@ function discardRecording() {
 
 function setRecState(state) {
   const sh = (id, v) => { const el=document.getElementById(id); if(el) el.style.display = v ? 'inline-flex' : 'none'; };
-  sh('record-btn',      state==='idle');
+  sh('record-btn',      state!=='recording' && state!=='paused');
   sh('pause-rec-btn',   state==='recording'||state==='paused');
   sh('stop-rec-btn',    state==='recording'||state==='paused');
   sh('play-rec-btn',    state==='stopped');
@@ -843,46 +1015,56 @@ function applyPreset(name) {
    BIND CONTROLS
    ===================================================== */
 function bindAllControls() {
+  const on = (id, event, handler) => {
+    const el = document.getElementById(id);
+    if (!el) {
+      console.warn(`[Karaoke] Missing element #${id}; skipped binding ${event}`);
+      return;
+    }
+    el.addEventListener(event, handler);
+  };
+
   // Backing
-  document.getElementById('play-backing-btn').addEventListener('click', playBacking);
-  document.getElementById('pause-backing-btn').addEventListener('click', pauseBacking);
-  document.getElementById('stop-backing-btn').addEventListener('click', stopBacking);
-  document.getElementById('backing-volume').addEventListener('input', function() {
+  on('play-backing-btn', 'click', playBacking);
+  on('pause-backing-btn', 'click', pauseBacking);
+  on('stop-backing-btn', 'click', stopBacking);
+  on('backing-volume', 'input', function() {
     document.getElementById('backing-vol-display').textContent = this.value + '%';
     updateStemVolumes();
   });
-  document.getElementById('backing-seek').addEventListener('input', function() {
+  on('backing-seek', 'input', function() {
     const t = parseInt(this.value);
     Object.values(backingAudios).forEach(a => a.currentTime = t);
     document.getElementById('backing-time').textContent = fmtTime(t);
   });
 
   // Recording
-  document.getElementById('record-btn').addEventListener('click', startRecording);
-  document.getElementById('pause-rec-btn').addEventListener('click', pauseRecording);
-  document.getElementById('stop-rec-btn').addEventListener('click', stopRecording);
-  document.getElementById('play-rec-btn').addEventListener('click', playRecording);
-  document.getElementById('save-rec-btn').addEventListener('click', saveRecording);
-  document.getElementById('discard-rec-btn').addEventListener('click', discardRecording);
+  on('record-btn', 'click', startRecording);
+  on('pause-rec-btn', 'click', pauseRecording);
+  on('stop-rec-btn', 'click', stopRecording);
+  on('play-rec-btn', 'click', playRecording);
+  on('save-rec-btn', 'click', saveRecording);
+  on('discard-rec-btn', 'click', discardRecording);
+  on('download-karaoke-btn', 'click', downloadKaraokeTrack);
 
   // Mic
-  document.getElementById('refresh-mics').addEventListener('click', enumerateMics);
-  document.getElementById('mic-gain').addEventListener('input', function() {
+  on('refresh-mics', 'click', enumerateMics);
+  on('mic-gain', 'input', function() {
     document.getElementById('mic-gain-display').textContent = this.value + '%';
     if (gainNode) gainNode.gain.value = this.value/100;
   });
-  document.getElementById('monitor-enable').addEventListener('change', function() {
+  on('monitor-enable', 'change', function() {
     if (monitorGain) monitorGain.gain.value = this.checked ? 0.7 : 0;
   });
 
   // Effects
-  document.getElementById('reverb-slider').addEventListener('input', function() {
+  on('reverb-slider', 'input', function() {
     document.getElementById('reverb-value').textContent = this.value + '%'; updateEffects();
   });
-  document.getElementById('echo-slider').addEventListener('input', function() {
+  on('echo-slider', 'input', function() {
     document.getElementById('echo-value').textContent = this.value + '%'; updateEffects();
   });
-  document.getElementById('autotune-slider').addEventListener('input', function() {
+  on('autotune-slider', 'input', function() {
     document.getElementById('autotune-value').textContent = +this.value>0 ? this.value+'%' : 'Off';
   });
 
@@ -893,17 +1075,21 @@ function bindAllControls() {
   // Lyrics
   const editor  = document.getElementById('lyrics-editor');
   const editBtn = document.getElementById('edit-lyrics-btn');
-  editor.addEventListener('input', function() {
-    localStorage.setItem(`lyrics_${projectId}`, this.value);
-    parseLyrics(this.value);
-  });
-  editBtn.addEventListener('click', function() {
-    lyricsEditorOpen = !lyricsEditorOpen;
-    editor.style.display = lyricsEditorOpen ? '' : 'none';
-    document.getElementById('lyrics-display').style.display = lyricsEditorOpen ? 'none' : '';
-    editBtn.querySelector('i').className = lyricsEditorOpen ? 'fas fa-eye-slash' : 'fas fa-edit';
-    editBtn.title = lyricsEditorOpen ? 'Hide Editor' : 'Edit Lyrics';
-  });
+  if (editor) {
+    editor.addEventListener('input', function() {
+      localStorage.setItem(`lyrics_${projectId}`, this.value);
+      parseLyrics(this.value);
+    });
+  }
+  if (editor && editBtn) {
+    editBtn.addEventListener('click', function() {
+      lyricsEditorOpen = !lyricsEditorOpen;
+      editor.style.display = lyricsEditorOpen ? '' : 'none';
+      document.getElementById('lyrics-display').style.display = lyricsEditorOpen ? 'none' : '';
+      editBtn.querySelector('i').className = lyricsEditorOpen ? 'fas fa-eye-slash' : 'fas fa-edit';
+      editBtn.title = lyricsEditorOpen ? 'Hide Editor' : 'Edit Lyrics';
+    });
+  }
   // Initially show display if lyrics exist, else show editor
   if (!localStorage.getItem(`lyrics_${projectId}`)) {
     document.getElementById('lyrics-display').style.display = 'none';
@@ -915,7 +1101,7 @@ function bindAllControls() {
     lyricsEditorOpen = false;
   }
 
-  document.getElementById('font-size-select').addEventListener('change', function() {
+  on('font-size-select', 'change', function() {
     const map = { small:'14px', medium:'18px', large:'24px', xlarge:'32px' };
     document.getElementById('lyrics-display').style.fontSize = map[this.value]||'18px';
   });

@@ -1,0 +1,31 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Flask App",
+			"type": "shell",
+			"command": "c:/Users/HP/Desktop/ai-stem-karaoke-studio/venv/Scripts/python.exe",
+			"args": [
+				"app.py"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Verify Settings End-to-End",
+			"type": "shell",
+			"command": "c:/Users/HP/Desktop/ai-stem-karaoke-studio/venv/Scripts/python.exe",
+			"args": [
+				"-c",
+				"import requests, json; base='http://127.0.0.1:5000'; rows=[]; add=lambda n,o,d='': rows.append((n,'PASS' if o else 'FAIL',d));\n\ntry:\n r=requests.get(base+'/',timeout=5); add('PAGE /', r.status_code==200, f'HTTP {r.status_code}')\nexcept Exception as e:\n add('PAGE /', False, str(e))\n\ntry:\n r=requests.get(base+'/projects',timeout=5); add('PAGE /projects', r.status_code==200, f'HTTP {r.status_code}')\nexcept Exception as e:\n add('PAGE /projects', False, str(e))\n\ntry:\n r=requests.get(base+'/settings',timeout=5); add('PAGE /settings', r.status_code==200, f'HTTP {r.status_code}')\nexcept Exception as e:\n add('PAGE /settings', False, str(e))\n\ntry:\n r=requests.get(base+'/api/settings',timeout=5); j=r.json(); add('GET /api/settings', r.ok and j.get('success') is True, f\"theme={j.get('settings',{}).get('theme')}\")\nexcept Exception as e:\n add('GET /api/settings', False, str(e))\n\ntry:\n payload={'theme':'light','show_animations':False,'compact_mode':True,'waveform_colors':'vibrant','accent_color':'#ff0000'}; p=requests.post(base+'/api/settings',json=payload,timeout=5); g=requests.get(base+'/api/settings',timeout=5).json().get('settings',{}); ok=(p.ok and g.get('theme')=='light' and g.get('show_animations') is False and g.get('compact_mode') is True and g.get('waveform_colors')=='vibrant' and g.get('accent_color')=='#0f766e'); add('POST /api/settings persistence', ok, json.dumps({k:g.get(k) for k in ['theme','show_animations','compact_mode','waveform_colors','accent_color']}))\nexcept Exception as e:\n add('POST /api/settings persistence', False, str(e))\n\ntry:\n r=requests.get(base+'/api/storage-info',timeout=5); j=r.json(); add('GET /api/storage-info', r.ok and j.get('success') is True and 'used_mb' in j and 'project_count' in j, f\"used_mb={j.get('used_mb')}, projects={j.get('project_count')}\")\nexcept Exception as e:\n add('GET /api/storage-info', False, str(e))\n\ntry:\n r=requests.post(base+'/api/clear-cache',timeout=5); j=r.json(); add('POST /api/clear-cache', r.ok and j.get('success') is True, f\"removed={j.get('removed')}\")\nexcept Exception as e:\n add('POST /api/clear-cache', False, str(e))\n\ntry:\n requests.post(base+'/api/settings',json={'theme':'dark','show_animations':True,'compact_mode':False,'waveform_colors':'default'},timeout=5); g=requests.get(base+'/api/settings',timeout=5).json().get('settings',{}); ok=(g.get('theme')=='dark' and g.get('show_animations') is True and g.get('compact_mode') is False and g.get('waveform_colors')=='default'); add('Restore baseline settings', ok, json.dumps({k:g.get(k) for k in ['theme','show_animations','compact_mode','waveform_colors','accent_color']}))\nexcept Exception as e:\n add('Restore baseline settings', False, str(e))\n\nprint('\\n'.join([f\"{s:<4} | {n:<32} | {d}\" for n,s,d in rows])); print('\\nOVERALL:', 'PASS' if all(s=='PASS' for _,s,_ in rows) else 'FAIL')"
+			]
+		},
+		{
+			"label": "Run Settings Check Script",
+			"type": "shell",
+			"command": "c:/Users/HP/Desktop/ai-stem-karaoke-studio/venv/Scripts/python.exe",
+			"args": [
+				"tmp_settings_check.py"
+			]
+		}
+	]
+}

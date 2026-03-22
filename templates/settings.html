@@ -143,16 +143,6 @@
                 </div>
 
                 <div class="setting-group">
-                    <label>Accent Color</label>
-                    <div style="display:flex;align-items:center;gap:1rem;">
-                        <input type="color" id="accent-color" value="#6366f1" style="width:56px;height:40px;cursor:pointer;border-radius:8px;border:none;">
-                        <span id="accent-hex" style="font-family:monospace;color:var(--text-secondary);">#6366f1</span>
-                        <button class="btn btn-secondary btn-sm" id="accent-reset-btn">Reset</button>
-                    </div>
-                    <p class="setting-help">Changes the highlight color throughout the app.</p>
-                </div>
-
-                <div class="setting-group">
                     <label>Waveform Color Scheme</label>
                     <select id="waveform-colors">
                         <option value="default">Default (Purple)</option>
@@ -275,7 +265,7 @@ const DEFAULT_SETTINGS = {
     use_gpu:             true,
     auto_cleanup:        true,
     theme:               'dark',
-    accent_color:        '#6366f1',
+    accent_color:        '#0f766e',
     waveform_colors:     'default',
     show_animations:     true,
     compact_mode:        false,
@@ -305,7 +295,7 @@ function showToast(msg, type = 'info') {
     setTimeout(() => t.remove(), 3500);
 }
 
-// ── apply theme & accent live ─────────────────────────────────────────────────
+// ── apply theme + fixed brand accent ───────────────────────────────────────────
 function applyTheme(theme) {
     const pref = theme === 'auto'
         ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
@@ -321,12 +311,11 @@ function applyTheme(theme) {
     }
 }
 
-function applyAccent(hex) {
-    document.documentElement.style.setProperty('--primary-color', hex);
-    // derive a slightly lighter variant for hover states
-    document.documentElement.style.setProperty('--primary-light', hex + 'cc');
-    const hexEl = document.getElementById('accent-hex');
-    if (hexEl) hexEl.textContent = hex;
+function applyBrandAccent() {
+    // Keep brand color consistent site-wide.
+    document.documentElement.style.setProperty('--primary-color', '#0f766e');
+    document.documentElement.style.setProperty('--primary-light', '#2dd4bf');
+    document.documentElement.style.setProperty('--primary-dark', '#115e59');
 }
 
 function applyAnimations(enabled) {
@@ -409,7 +398,7 @@ function collectSettings() {
         use_gpu:            chk('use-gpu'),
         auto_cleanup:       chk('auto-cleanup'),
         theme:              val('theme')              || 'dark',
-        accent_color:       val('accent-color')       || '#6366f1',
+        accent_color:       '#0f766e',
         waveform_colors:    val('waveform-colors')    || 'default',
         show_animations:    chk('show-animations'),
         compact_mode:       chk('compact-mode'),
@@ -434,7 +423,6 @@ function applyToForm(s) {
     setChk('use-gpu',            s.use_gpu);
     setChk('auto-cleanup',       s.auto_cleanup);
     setVal('theme',              s.theme);
-    setVal('accent-color',       s.accent_color);
     setVal('waveform-colors',    s.waveform_colors);
     setChk('show-animations',    s.show_animations);
     setChk('compact-mode',       s.compact_mode);
@@ -446,7 +434,7 @@ function applyToForm(s) {
 
     // live visual effects
     applyTheme(s.theme);
-    applyAccent(s.accent_color);
+    applyBrandAccent();
     applyAnimations(s.show_animations);
     applyCompact(s.compact_mode);
 }
@@ -509,13 +497,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Live theme switch
     document.getElementById('theme')?.addEventListener('change', e => applyTheme(e.target.value));
 
-    // Live accent color
-    document.getElementById('accent-color')?.addEventListener('input', e => applyAccent(e.target.value));
-    document.getElementById('accent-reset-btn')?.addEventListener('click', () => {
-        setVal('accent-color', '#6366f1');
-        applyAccent('#6366f1');
-    });
-
     // Live animations toggle
     document.getElementById('show-animations')?.addEventListener('change', e => applyAnimations(e.target.checked));
 
@@ -572,6 +553,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Boot
     await loadSettings();
+    applyBrandAccent();
     loadStorageInfo();
 });
 </script>

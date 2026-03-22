@@ -5,16 +5,24 @@
 {% block content %}
 <div class="container">
 
-    <!-- Hero -->
-    <div class="hero-section">
-        <h1>STEM Karaoke Studio</h1>
-        <p class="subtitle">Upload any song and Demucs will separate it into stems — then sing along, record yourself and compare your performance.</p>
+    <section class="hero-section corporate-hero">
+        <span class="hero-badge"><i class="fas fa-shield-check"></i> Production-Ready Audio Workspace</span>
+        <h1>Professional Stem Separation and Karaoke Production</h1>
+        <p class="subtitle">Build publish-ready karaoke mixes with clean stem isolation, precision controls, recording workflow, and AI-backed vocal analysis in one studio experience.</p>
         <div class="hero-buttons">
+            <a href="#upload-section" class="btn btn-primary">
+                <i class="fas fa-upload"></i> Start New Session
+            </a>
             <a href="{{ url_for('projects') }}" class="btn btn-secondary">
-                <i class="fas fa-folder-open"></i> My Projects
+                <i class="fas fa-folder-open"></i> Open Projects
             </a>
         </div>
-    </div>
+        <div class="trust-strip">
+            <div class="trust-item"><span class="trust-value">4</span><span class="trust-label">Studio-Quality Stems</span></div>
+            <div class="trust-item"><span class="trust-value">1</span><span class="trust-label">Unified Workflow</span></div>
+            <div class="trust-item"><span class="trust-value">6</span><span class="trust-label">AI Scoring Metrics</span></div>
+        </div>
+    </section>
 
     <!-- Upload Section -->
     {% include 'components/upload_section.html' %}
@@ -43,27 +51,31 @@
         </div>
     </section>
 
-    <!-- Feature Cards -->
+    <div class="section-heading">
+        <h2>Designed for Professional Use</h2>
+        <p>Every stage is optimized for speed, consistency, and reliable output quality.</p>
+    </div>
+
     <div class="features-grid">
         <div class="feature-card">
             <div class="feature-icon"><i class="fas fa-magic"></i></div>
-            <h3>Stem Separation</h3>
-            <p>Powered by HT-Demucs — split any track into vocals, drums, bass and other.</p>
+            <h3>High-Fidelity Separation</h3>
+            <p>Run advanced Demucs models to isolate vocals, drums, bass and accompaniment with clean, dependable results.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon"><i class="fas fa-sliders-h"></i></div>
-            <h3>Stem Mixer</h3>
-            <p>Adjust volume, mute, solo each stem individually and export your custom mix.</p>
+            <h3>Precision Mix Control</h3>
+            <p>Shape each stem with real-time level control, solo/mute, tempo control, and export-ready render workflow.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon"><i class="fas fa-microphone-alt"></i></div>
-            <h3>Karaoke Mode</h3>
-            <p>Mute the vocals and record yourself singing over the backing track.</p>
+            <h3>Recording Studio Flow</h3>
+            <p>Record with count-in, effects, multi-take handling, and synchronized lyric guidance for consistent performance sessions.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon"><i class="fas fa-chart-bar"></i></div>
-            <h3>Performance Analysis</h3>
-            <p>Compare your recording against the original vocal stem across 6 metrics.</p>
+            <h3>Objective Performance Insights</h3>
+            <p>Compare vocalist takes against the original stem with pitch, timing, tone, expression, consistency, and breath scoring.</p>
         </div>
     </div>
 

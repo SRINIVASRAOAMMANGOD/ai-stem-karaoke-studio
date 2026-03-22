@@ -1,0 +1,22 @@
+{
+  "audio_output": "default",
+  "audio_input": "default",
+  "sample_rate": "48000",
+  "buffer_size": "512",
+  "normalize_audio": true,
+  "default_model": "htdemucs",
+  "processing_quality": "balanced",
+  "cpu_threads": 4,
+  "use_gpu": true,
+  "auto_cleanup": true,
+  "theme": "dark",
+  "accent_color": "#0f766e",
+  "waveform_colors": "default",
+  "show_animations": true,
+  "compact_mode": false,
+  "max_storage": "1000",
+  "auto_delete_old": false,
+  "export_format": "wav",
+  "enable_debug": false,
+  "api_endpoint": "http://localhost:5000"
+}
