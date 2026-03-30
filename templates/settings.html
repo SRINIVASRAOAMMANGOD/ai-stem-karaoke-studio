@@ -215,7 +215,7 @@
                     </label>
                 </div>
 
-                <div class="setting-group">
+                <div class="setting-group" id="api-endpoint-group" style="display:none;">
                     <label>API Endpoint</label>
                     <input type="text" id="api-endpoint" value="http://localhost:5000" placeholder="http://localhost:5000" style="width:100%;max-width:360px;">
                     <p class="setting-help">Only change this if you are running the server on a different host/port.</p>
@@ -281,6 +281,22 @@ function val(id)       { return document.getElementById(id)?.value; }
 function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
 function chk(id)       { return document.getElementById(id)?.checked; }
 function setChk(id, v) { const el = document.getElementById(id); if (el) el.checked = !!v; }
+
+// ── auto-detect API endpoint ──────────────────────────────────────────────────
+function getAutoDetectedApiEndpoint() {
+    const origin = window.location.origin;  // e.g., http://localhost:5000
+    const hostname = window.location.hostname;  // e.g., localhost
+    
+    // If on localhost, use http://localhost:5000
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:5000';
+    }
+    
+    // If on production, use the current server address
+    // Support both http and https
+    const protocol = window.location.protocol;  // http: or https:
+    return protocol + '//' + window.location.host + ':5000';
+}
 
 function showToast(msg, type = 'info') {
     const c = {success:'#10b981', error:'#ef4444', info:'#6366f1'};
@@ -406,7 +422,7 @@ function collectSettings() {
         auto_delete_old:    chk('auto-delete-old'),
         export_format:      val('export-format')      || 'wav',
         enable_debug:       chk('enable-debug'),
-        api_endpoint:       val('api-endpoint')       || 'http://localhost:5000',
+        api_endpoint:       getAutoDetectedApiEndpoint(),  // Auto-detect instead of user input
     };
 }
 
@@ -430,7 +446,8 @@ function applyToForm(s) {
     setChk('auto-delete-old',    s.auto_delete_old);
     setVal('export-format',      s.export_format);
     setChk('enable-debug',       s.enable_debug);
-    setVal('api-endpoint',       s.api_endpoint);
+    // Auto-detect API endpoint - don't use saved value if it's localhost but we're on production
+    setVal('api-endpoint',       getAutoDetectedApiEndpoint());
 
     // live visual effects
     applyTheme(s.theme);

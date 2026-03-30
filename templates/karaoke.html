@@ -243,24 +243,155 @@ let lyricAnimId      = null;
 let lyricsEditorOpen = true;
 
 /* =====================================================
+   CLEANUP & PAGE STATE
+   ===================================================== */
+function cleanupResources() {
+  console.log('[Karaoke] Cleaning up resources…');
+  try {
+    // Stop backing playback - safely handle orphaned elements
+    Object.values(backingAudios).forEach(a => { 
+      try {
+        if (a && typeof a.pause === 'function') {
+          a.pause(); 
+          a.currentTime = 0;
+        }
+      } catch (e) {
+        console.warn('[Karaoke] Error pausing audio element:', e);
+      }
+    });
+    isBackingPlaying = false;
+  } catch (e) {
+    console.warn('[Karaoke] Error in backing cleanup:', e);
+  }
+  
+  // Stop recording if active
+  try {
+    if (mediaRecorder && mediaRecorder.state && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+  } catch (e) {
+    console.warn('[Karaoke] Error stopping recorder:', e);
+  }
+  
+  // Close mic stream
+  try {
+    if (micStream) {
+      micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
+    }
+  } catch (e) {
+    console.warn('[Karaoke] Error closing mic stream:', e);
+  }
+  
+  console.log('[Karaoke] Resources cleaned up');
+}
+
+function resetAudioContext() {
+  console.log('[Karaoke] Resetting audio context state');
+  try {
+    if (audioCtx) {
+      if (audioCtx.state === 'suspended') {
+        console.log('[Karaoke] Audio context is suspended, resuming…');
+        audioCtx.resume().catch(e => console.warn('Could not resume context:', e));
+      } else if (audioCtx.state === 'closed') {
+        console.log('[Karaoke] Audio context is closed, nullifying…');
+        audioCtx = null;
+        gainNode = null;
+        analyserNode = null;
+        reverbNode = null;
+        reverbMixNode = null;
+        delayNode = null;
+        delayFeedback = null;
+        delayMixNode = null;
+        monitorGain = null;
+        effectsDest = null;
+      }
+    }
+  } catch (e) {
+    console.warn('[Karaoke] Error resetting audio context:', e);
+  }
+}
+
+/* =====================================================
    INIT
    ===================================================== */
 document.addEventListener('DOMContentLoaded', async () => {
-  bindAllControls();
-  // Extra-safe trigger path: delegated click handler for dynamically re-rendered buttons.
+  console.log('[Karaoke] DOMContentLoaded event fired');
+  
+  // Reset any stale state from previous page loads
+  cleanupResources();
+  resetAudioContext();
+  audioUnlocked = false; // Reset unlock flag so we can unlock audio again
+  
+  try {
+    console.log('[Karaoke] Calling bindAllControls()');
+    bindAllControls();
+    console.log('[Karaoke] bindAllControls() completed');
+  } catch (err) {
+    console.error('[Karaoke] Error in bindAllControls:', err);
+  }
+  // Delegated click handler for record button
   document.addEventListener('click', (ev) => {
     const btn = ev.target && ev.target.closest ? ev.target.closest('#record-btn') : null;
     if (!btn) return;
+    console.log('[Karaoke] Record button clicked via delegated listener');
     startRecording().catch(err => console.error('record click failed:', err));
   });
+  
   window.__startRecordingFromHtml = () => {
+    console.log('[Karaoke] Record button clicked via inline handler');
     startRecording().catch(err => console.error('record inline failed:', err));
   };
-  // Bind controls first so Record responds immediately even if loading is slow.
-  loadStems().catch(err => console.warn('loadStems failed:', err));
-  enumerateMics().catch(err => console.warn('enumerateMics failed:', err));
+  // Load stems
+  console.log('[Karaoke] Starting loadStems()');
+  try {
+    await loadStems();
+    console.log('[Karaoke] loadStems() completed');
+  } catch (err) {
+    console.warn('[Karaoke] loadStems failed:', err);
+  }
+  
+  // Enumerate mics
+  console.log('[Karaoke] Starting enumerateMics()');
+  try {
+    await enumerateMics();
+    console.log('[Karaoke] enumerateMics() completed');
+  } catch (err) {
+    console.warn('[Karaoke] enumerateMics failed:', err);
+  }
+  
+  // Load lyrics
+  console.log('[Karaoke] Loading saved lyrics');
   loadSavedLyrics();
+  
+  // Init existing recording
+  console.log('[Karaoke] Initializing existing recording');
   initExistingRecording();
+  
+  console.log('[Karaoke] Page initialization complete');
+});
+
+/* ── Page Visibility & Unload Handlers ── */
+document.addEventListener('visibilitychange', () => {
+  console.log('[Karaoke] Page visibility changed:', document.hidden ? 'hidden' : 'visible');
+  if (!document.hidden) {
+    // Page became visible - resume audio context if suspended
+    resetAudioContext();
+    console.log('[Karaoke] Page is now visible, audio context reset');
+  } else {
+    // Page became hidden - pause playback but don't closed' since browser may cache this
+    if (isBackingPlaying) pauseBacking();
+    if (mediaRecorder && mediaRecorder.state === 'recording') pauseRecording();
+    console.log('[Karaoke] Page is hidden, paused playback');
+  }
+});
+
+window.addEventListener('beforeunload', () => {
+  console.log('[Karaoke] Before unload - closing audio context');
+  cleanupResources();
+  if (audioCtx && audioCtx.state !== 'closed') {
+    audioCtx.close().catch(()=>{});
+  }
 });
 
 function initExistingRecording() {
@@ -273,6 +404,7 @@ function initExistingRecording() {
   setRecState('idle');
   document.getElementById('compare-btn').style.display = 'inline-flex';
   document.getElementById('download-karaoke-btn').style.display = 'inline-flex';
+  console.log('[Karaoke] Existing recording initialized');
 }
 
 function refreshSavedRecordingPanel(url) {
@@ -292,24 +424,85 @@ function refreshSavedRecordingPanel(url) {
    BACKING TRACK
    ===================================================== */
 async function loadStems() {
-  console.log(`[Stems] Fetching stems for project: ${projectId}`);
+  console.log(`[Stems] Starting loadStems for project: ${projectId}`);
+  
+  // Clean up old audio elements first - safely handle any errors
+  console.log('[Stems] Cleaning up old audio elements');
   try {
+    Object.values(backingAudios).forEach(audio => {
+      try {
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+          if (audio.parentNode) audio.parentNode.removeChild(audio);
+          audio.src = '';
+        }
+      } catch (e) {
+        console.warn('[Stems] Error cleaning individual audio element:', e);
+      }
+    });
+  } catch (e) {
+    console.warn('[Stems] Error during cleanup:', e);
+  }
+  
+  backingAudios = {};
+  stemEnabled = {};
+  
+  // Clear toggle UI
+  const togglesEl = document.getElementById('stem-toggles');
+  if (togglesEl) togglesEl.innerHTML = '';
+  const downloadsEl = document.getElementById('stem-downloads');
+  if (downloadsEl) downloadsEl.innerHTML = '';
+  
+  const loadingEl = document.getElementById('backing-loading');
+  
+  try {
+    console.log(`[Stems] About to fetch /api/stems/${projectId}`);
     const resp = await fetch(`/api/stems/${projectId}`);
-    const data = await resp.json();
+    console.log(`[Stems] Fetch completed. Status: ${resp.status}`);
     
-    if (!data.success || !data.stems) {
-      document.getElementById('backing-loading').innerHTML =
-        '<i class="fas fa-exclamation-circle"></i> No stems found.';
+    if (!resp.ok) {
+      console.error(`[Stems] HTTP error: ${resp.status} ${resp.statusText}`);
+      loadingEl.innerHTML = `<i class="fas fa-exclamation-circle"></i> Error loading stems (HTTP ${resp.status})`;
+      return;
+    }
+    
+    console.log(`[Stems] About to parse JSON`);
+    let data;
+    try {
+      data = await resp.json();
+      console.log(`[Stems] Parsed JSON. Data keys:`, Object.keys(data));
+    } catch (parseErr) {
+      console.error(`[Stems] JSON parse error:`, parseErr);
+      loadingEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> Invalid server response';
+      return;
+    }
+    
+    if (!data.success) {
+      console.error(`[Stems] API error: ${data.error}`);
+      loadingEl.innerHTML = 
+        `<i class="fas fa-exclamation-circle"></i> Server error: ${data.error || 'Unknown error'}`;
+      return;
+    }
+    
+    console.log(`[Stems] Checking stems object:`, data.stems);
+    if (!data.stems || Object.keys(data.stems).length === 0) {
+      console.error(`[Stems] No stems in response or empty stems object`);
+      loadingEl.innerHTML =
+        '<i class="fas fa-exclamation-circle"></i> No stems found. Please re-process the audio file from the home page.';
       return;
     }
 
+    console.log(`[Stems] Getting DOM elements`);
     const togglesEl = document.getElementById('stem-toggles');
     const downloadsEl = document.getElementById('stem-downloads');
     
     console.log(`[Stems] Got ${Object.keys(data.stems).length} stems`);
 
     // Create all audio elements WITHOUT waiting for load
+    console.log(`[Stems] Starting to create audio elements`);
     Object.entries(data.stems).forEach(([stemName, stemUrl]) => {
+      console.log(`[Stems] Creating audio for: ${stemName}`);
       const audio = document.createElement('audio');
       audio.src = stemUrl;
       audio.crossOrigin = 'anonymous';
@@ -355,17 +548,29 @@ async function loadStems() {
     });
 
     // Show UI immediately - don't wait for audio to load
-    console.log(`[Stems] ✓ Showing UI controls`);
+    console.log(`[Stems] ✓ All stems created. Showing UI controls`);
+    console.log(`[Stems] Hiding backing-loading element`);
     document.getElementById('backing-loading').style.display = 'none';
+    console.log(`[Stems] Showing backing-ready element`);
     document.getElementById('backing-ready').style.display = '';
+    console.log(`[Stems] Starting seekbar`);
     startSeekbar();
+    console.log(`[Stems] Showing audio-unlock-banner`);
     document.getElementById('audio-unlock-banner').style.display = 'flex';
-    document.addEventListener('click', activateAudio, { once: true, capture: true });
+    
+    // Re-enable audio unlock listener for page re-entry
+    console.log(`[Stems] Adding activateAudio listener`);
+    // Remove old listener if any
+    document.removeEventListener('click', activateAudio, { capture: true });
+    // Add new listener - NOT with once:true, so it can work on re-entry
+    document.addEventListener('click', activateAudio, { capture: true });
+    console.log(`[Stems] ✓ loadStems completed successfully!`);
 
   } catch(err) {
-    console.error(`[Stems] ERROR:`, err);
+    console.error(`[Stems] ERROR:`, err.message, err);
+    console.error(`[Stems] Full stack:`, err);
     document.getElementById('backing-loading').innerHTML =
-      '<i class="fas fa-exclamation-circle"></i> Error: ' + err.message;
+      '<i class="fas fa-exclamation-circle"></i> Error loading stems: ' + err.message;
   }
 }
 
@@ -382,24 +587,59 @@ function getFirstAudio() { return Object.values(backingAudios)[0] || null; }
    Registered as a capture-phase document listener so it fires BEFORE any
    element's own click handler — guaranteeing audio is unlocked before
    startRecording() calls a.play(). We do NOT pause here; startRecording()
-   will call pause()+play() itself, avoiding any microtask race. */
+   will call pause()+play() itself, avoiding any microtask race. 
+   Not using { once: true } so it can work properly on page re-entry. */
 function activateAudio() {
+  if (audioUnlocked) return; // Already unlocked in this session
+  
   const banner = document.getElementById('audio-unlock-banner');
   const audios = Object.values(backingAudios);
-  if (!audios.length) return;
+  if (!audios.length) {
+    console.log('[Karaoke] No audio elements to unlock yet');
+    return;
+  }
 
-  audios.forEach(a => {
-    const savedVol = a.volume;
-    a.volume = 0;
-    // Play silently — just enough to satisfy the browser's autoplay gate.
-    // startRecording() will pause → rewind → play at real volume immediately after.
-    a.play().catch(() => {});
-    // Restore volume after a tick so the silent play doesn't linger if
-    // startRecording is NOT called (e.g. user clicked something else).
-    setTimeout(() => {
-      if (!isBackingPlaying) { a.pause(); a.currentTime = 0; }
-      a.volume = savedVol;
-    }, 200);
+  console.log('[Karaoke] activateAudio: unlocking', audios.length, 'audio elements');
+  let unlockedCount = 0;
+  audios.forEach((a, idx) => {
+    try {
+      if (!a || typeof a.play !== 'function') {
+        console.warn(`[Karaoke] Audio element ${idx} is not a valid audio element`);
+        return;
+      }
+      
+      const savedVol = a.volume;
+      a.volume = 0;
+      
+      // Play silently — just enough to satisfy the browser's autoplay gate.
+      const promise = a.play();
+      if (promise) {
+        promise
+          .then(() => {
+            unlockedCount++;
+            console.log(`[Karaoke] Audio element ${idx} unlocked`);
+          })
+          .catch((e) => {
+            console.warn(`[Karaoke] Silent play failed for element ${idx}:`, e.message);
+          });
+      }
+      
+      // Restore volume after a tick so the silent play doesn't linger if
+      // startRecording is NOT called (e.g. user clicked something else).
+      setTimeout(() => {
+        if (!isBackingPlaying) { 
+          try {
+            a.pause(); 
+            a.currentTime = 0;
+          } catch(e) {
+            console.warn('[Karaoke] Error pausing element after unlock:', e);
+          }
+        }
+        a.volume = savedVol;
+      }, 200);
+    } catch (e) {
+      console.error(`[Karaoke] Error unlocking audio element ${idx}:`, e);
+    }
   });
 
   audioUnlocked = true;
@@ -407,24 +647,45 @@ function activateAudio() {
     banner.classList.add('audio-unlock-done');
     setTimeout(() => { banner.style.display = 'none'; }, 500);
   }
+  console.log('[Karaoke] activateAudio: unlocking complete');
 }
 
 function playBacking() {
-  if (!Object.keys(backingAudios).length) return;
+  if (!Object.keys(backingAudios).length) {
+    showToast('No stems loaded yet', 'warning');
+    return;
+  }
+  
+  // Resume audio context if suspended
+  if (audioCtx && audioCtx.state === 'suspended') {
+    console.log('[Backing] Audio context suspended, resuming…');
+    audioCtx.resume().catch(e => console.warn('Could not resume context:', e));
+  }
+  
   const ref = getFirstAudio();
+  if (!ref) {
+    console.error('[Backing] No audio element found');
+    showToast('Audio elements not ready', 'error');
+    return;
+  }
+  
   const vol = document.getElementById('backing-volume').value / 100;
   let anyFailed = false;
   Object.entries(backingAudios).forEach(([name, a]) => {
-    a.currentTime = ref.currentTime;
-    a.volume = stemEnabled[name] ? vol : 0;
-    const promise = a.play();
-    if (promise) promise.catch(err => {
-      if (!anyFailed) {
-        anyFailed = true;
-        showToast('Audio blocked by browser. Try clicking the Play button once first.', 'warning');
-        console.warn('playBacking blocked:', err);
-      }
-    });
+    try {
+      a.currentTime = ref.currentTime;
+      a.volume = stemEnabled[name] ? vol : 0;
+      const promise = a.play();
+      if (promise) promise.catch(err => {
+        if (!anyFailed) {
+          anyFailed = true;
+          showToast('Audio blocked by browser. Try clicking the Play button once first.', 'warning');
+          console.warn('playBacking blocked:', err);
+        }
+      });
+    } catch (e) {
+      console.error(`[Backing] Error playing stem ${name}:`, e);
+    }
   });
   isBackingPlaying = true;
   document.getElementById('play-backing-btn').style.display  = 'none';
@@ -505,7 +766,18 @@ async function enumerateMics() {
 
 async function initAudioPipeline() {
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
-  if (audioCtx && audioCtx.state !== 'closed') await audioCtx.close();
+  
+  // If audio context exists, properly close it before creating new one
+  if (audioCtx) {
+    if (audioCtx.state !== 'closed') {
+      try {
+        await audioCtx.close();
+      } catch(e) {
+        console.warn('Error closing audio context:', e);
+      }
+    }
+    audioCtx = null;
+  }
 
   const deviceId = document.getElementById('mic-select').value;
   const constraints = {
@@ -606,8 +878,19 @@ function updateEffects() {
    RECORDING
    ===================================================== */
 async function startRecording() {
-  if (mediaRecorder && mediaRecorder.state && mediaRecorder.state !== 'inactive') return;
-  if (isStartingRecording) return;
+  console.log('[Recording] startRecording called');
+  console.log('[Recording] mediaRecorder state:', mediaRecorder?.state);
+  console.log('[Recording] isStartingRecording:', isStartingRecording);
+  console.log('[Recording] audioCtx state:', audioCtx?.state);
+  
+  if (mediaRecorder && mediaRecorder.state && mediaRecorder.state !== 'inactive') {
+    console.log('[Recording] Already recording or in progress, returning');
+    return;
+  }
+  if (isStartingRecording) {
+    console.log('[Recording] Already starting recording, returning');
+    return;
+  }
   isStartingRecording = true;
 
   try {
@@ -619,7 +902,11 @@ async function startRecording() {
     }
 
   const hasBacking  = Object.keys(backingAudios).length > 0;
+  console.log('[Recording] hasBacking:', hasBacking);
+  console.log('[Recording] backingAudios keys:', Object.keys(backingAudios));
+  
   const willPlay    = hasBacking && document.getElementById('play-backing-while-recording').checked;
+  console.log('[Recording] willPlay:', willPlay);
 
   /* Hide the unlock banner. */
   const banner = document.getElementById('audio-unlock-banner');
@@ -666,16 +953,24 @@ async function startRecording() {
   /* ── Step 3: open microphone ── */
   usingRawMicFallback = false;
   let stream;
-  try { stream = await initAudioPipeline(); }
+  try { 
+    console.log('[Recording] Attempting to init audio pipeline with effects…');
+    stream = await initAudioPipeline(); 
+    console.log('[Recording] Audio pipeline initialized successfully');
+  }
   catch(err) {
+    console.log('[Recording] Audio pipeline init failed:', err.message);
     // Fallback method: bypass effects graph and record raw microphone input.
     try {
+      console.log('[Recording] Attempting fallback: raw mic recording…');
       if (micStream) { micStream.getTracks().forEach(t => t.stop()); }
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream = micStream;
       usingRawMicFallback = true;
       showToast('Using fallback recording mode (raw mic).', 'warning');
+      console.log('[Recording] Fallback mode active');
     } catch (fallbackErr) {
+      console.error('[Recording] Fallback failed:', fallbackErr);
       showToast('Microphone error: ' + (fallbackErr.message || err.message), 'error');
       if (backingStartedByRecording) { stopBacking(); backingStartedByRecording = false; }
       return;
@@ -700,7 +995,9 @@ async function startRecording() {
   recTimerInterval = setInterval(tickRecTimer, 50);
   setRecState('recording');
   showToast('Recording…', 'success');
+  console.log('[Recording] Recording started');
   } catch (err) {
+    console.error('[Recording] Exception in startRecording:', err);
     const ind = document.getElementById('recording-indicator');
     if (ind) {
       const t = ind.querySelector('.status-text');
@@ -998,17 +1295,31 @@ const PRESETS = {
   studio:  { reverb:10, echo: 5, gain:110 },
 };
 function applyPreset(name) {
-  const p = PRESETS[name]; if (!p) return;
-  document.getElementById('reverb-slider').value  = p.reverb;
-  document.getElementById('echo-slider').value    = p.echo;
-  document.getElementById('mic-gain').value       = p.gain;
-  document.getElementById('reverb-value').textContent   = p.reverb + '%';
-  document.getElementById('echo-value').textContent     = p.echo   + '%';
-  document.getElementById('mic-gain-display').textContent = p.gain + '%';
-  document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', b.dataset.preset===name));
-  updateEffects();
-  if (gainNode) gainNode.gain.value = p.gain/100;
-  showToast(`"${name}" preset applied`, 'success');
+  console.log(`[Preset] Applying preset: ${name}`);
+  const p = PRESETS[name];
+  if (!p) {
+    console.error(`[Preset] Preset "${name}" not found in PRESETS`);
+    console.log(`[Preset] Available presets:`, Object.keys(PRESETS));
+    return;
+  }
+  
+  console.log(`[Preset] Preset data:`, p);
+  
+  try {
+    document.getElementById('reverb-slider').value  = p.reverb;
+    document.getElementById('echo-slider').value    = p.echo;
+    document.getElementById('mic-gain').value       = p.gain;
+    document.getElementById('reverb-value').textContent   = p.reverb + '%';
+    document.getElementById('echo-value').textContent     = p.echo   + '%';
+    document.getElementById('mic-gain-display').textContent = p.gain + '%';
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', b.dataset.preset===name));
+    updateEffects();
+    if (gainNode) gainNode.gain.value = p.gain/100;
+    showToast(`"${name}" preset applied`, 'success');
+    console.log(`[Preset] Preset "${name}" applied successfully`);
+  } catch (err) {
+    console.error(`[Preset] Error applying preset:`, err);
+  }
 }
 
 /* =====================================================
@@ -1069,8 +1380,18 @@ function bindAllControls() {
   });
 
   // Presets
-  document.querySelectorAll('.preset-btn').forEach(btn =>
-    btn.addEventListener('click', () => applyPreset(btn.dataset.preset)));
+  console.log('[Karaoke] Binding preset buttons');
+  const presetBtns = document.querySelectorAll('.preset-btn');
+  console.log(`[Karaoke] Found ${presetBtns.length} preset buttons`);
+  presetBtns.forEach((btn, idx) => {
+    const preset = btn.dataset.preset;
+    console.log(`[Karaoke] Binding preset button ${idx+1}: ${preset}`);
+    btn.addEventListener('click', () => {
+      console.log(`[Karaoke] Preset button "${preset}" clicked`);
+      applyPreset(preset);
+    });
+  });
+  console.log('[Karaoke] Preset buttons bound');
 
   // Lyrics
   const editor  = document.getElementById('lyrics-editor');

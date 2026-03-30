@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Stems API</title>
+</head>
+<body>
+    <h1>Debug Stems API</h1>
+    <button onclick="testStemsAPI()">Test API Call</button>
+    <pre id="output"></pre>
+    
+    <script>
+    async function testStemsAPI() {
+        const output = document.getElementById('output');
+        output.textContent = 'Testing...\n';
+        
+        try {
+            const projectId = '20260328_195528';
+            const url = `/api/stems/${projectId}`;
+            output.textContent += `Fetching: ${url}\n`;
+            
+            const resp = await fetch(url);
+            output.textContent += `Response status: ${resp.status}\n`;
+            output.textContent += `Response ok: ${resp.ok}\n`;
+            
+            const data = await resp.json();
+            output.textContent += `Response data: ${JSON.stringify(data, null, 2)}\n`;
+            
+            if (data.stems) {
+                output.textContent += `\nStems found:\n`;
+                for (const [name, url] of Object.entries(data.stems)) {
+                    output.textContent += `  ${name}: ${url}\n`;
+                    
+                    // Try to fetch the first one
+                    const stemResp = await fetch(url);
+                    output.textContent += `    Status: ${stemResp.status}\n`;
+                    output.textContent += `    Content-Type: ${stemResp.headers.get('Content-Type')}\n`;
+                    output.textContent += `    Content-Length: ${stemResp.headers.get('Content-Length')}\n`;
+                }
+            }
+        } catch (err) {
+            output.textContent += `ERROR: ${err.message}\n${err.stack}\n`;
+        }
+    }
+    </script>
+</body>
+</html>

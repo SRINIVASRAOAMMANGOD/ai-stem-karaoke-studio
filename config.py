@@ -1,96 +1,133 @@
+"""
+================================================================================
+KARAOKE STUDIO - CONFIGURATION
+================================================================================
+Environment-specific settings for Flask app.
+
+Three configurations:
+1. DEVELOPMENT - Debug mode, verbose logging, easy testing
+2. PRODUCTION - Security hardened, optimized, requires env variables
+3. TESTING - Test-specific settings with SQLite
+
+Key Settings:
+- File upload: 50MB max allowed
+- Audio support: MP3, WAV, FLAC, M4A, OGG, AAC
+- Demucs models: htdemucs (default), htdemucs_ft, htdemucs_6s, etc
+- Audio processing: 48kHz sample rate, 512 sample buffer
+================================================================================
+"""
+
 import os
 from datetime import timedelta
 
+
 class Config:
-    """Base configuration"""
+    """
+    Base configuration - shared by all environments.
+    Override in subclasses for environment-specific settings.
+    """
     
-    # Flask settings
+    # ── Flask Core Settings ───────────────────────────────────────────────
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     DEBUG = False
     TESTING = False
     
-    # File upload settings
-    UPLOAD_FOLDER = 'uploads'
-    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB max file size
-    ALLOWED_EXTENSIONS = {'mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'}
+    # ── File Upload Settings ──────────────────────────────────────────────
+    UPLOAD_FOLDER = 'uploads'                              # Temporary upload folder
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024                 # 50MB max file size
+    ALLOWED_EXTENSIONS = {'mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'}  # Supported formats
     
-    # Database settings
-    DATABASE_FILE = 'karaoke_studio.db'
+    # ── Database ──────────────────────────────────────────────────────────
+    DATABASE_FILE = 'karaoke_studio.db'                    # SQLite database path
     
-    # Demucs settings
-    DEFAULT_MODEL = 'htdemucs'
+    # ── Audio Stem Separation (Demucs AI) ─────────────────────────────────
+    DEFAULT_MODEL = 'htdemucs'                             # Default Demucs model for separation
     AVAILABLE_MODELS = [
-        'htdemucs',
-        'htdemucs_ft',
-        'htdemucs_6s',
-        'mdx_extra',
-        'mdx_extra_q'
+        'htdemucs',        # Recommended: 4-stem separation (vocals, drums, bass, other)
+        'htdemucs_ft',     # Fine-tuned version
+        'htdemucs_6s',     # 6-stem version (more granular)
+        'mdx_extra',       # Alternative model
+        'mdx_extra_q'      # Quantized version (smaller, faster)
     ]
     
-    # Audio processing settings
-    DEFAULT_SAMPLE_RATE = 48000
-    DEFAULT_BUFFER_SIZE = 512
+    # ── Audio Processing Settings ─────────────────────────────────────────
+    DEFAULT_SAMPLE_RATE = 48000                            # Audio sample rate (Hz)
+    DEFAULT_BUFFER_SIZE = 512                              # WebAudio buffer size (samples)
     
-    # Session settings
-    PERMANENT_SESSION_LIFETIME = timedelta(hours=24)
-    SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
-    SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    # ── Session Management ────────────────────────────────────────────────
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=24)       # Session duration
+    SESSION_COOKIE_SECURE = False                          # HTTPS only (set True in production)
+    SESSION_COOKIE_HTTPONLY = True                         # Prevent JS access to cookies
+    SESSION_COOKIE_SAMESITE = 'Lax'                        # CSRF protection
     
-    # API settings
-    API_MAX_REQUESTS_PER_MINUTE = 60
+    # ── API Rate Limiting ─────────────────────────────────────────────────
+    API_MAX_REQUESTS_PER_MINUTE = 60                       # Prevent abuse
     
-    # Feature flags
-    ENABLE_YOUTUBE_DOWNLOAD = True
-    ENABLE_AI_ANALYSIS = True
-    ENABLE_CLOUD_STORAGE = False
+    # ── Feature Flags ─────────────────────────────────────────────────────
+    ENABLE_YOUTUBE_DOWNLOAD = True                         # Allow downloading from YouTube
+    ENABLE_AI_ANALYSIS = True                              # Enable vocal performance analysis
+    ENABLE_CLOUD_STORAGE = False                           # Cloud storage integration (future)
 
 
 class DevelopmentConfig(Config):
-    """Development configuration"""
+    """
+    Development configuration - for local testing and debugging.
+    Features: Debug mode on, stack traces shown, auto-reload on code changes
+    """
     DEBUG = True
     TESTING = False
 
 
 class ProductionConfig(Config):
-    """Production configuration"""
+    """
+    Production configuration - security hardened, optimized.
+    IMPORTANT: Requires SECRET_KEY environment variable to be set!
+    """
     DEBUG = False
     TESTING = False
-    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = True  # HTTPS only
     
-    # Override with environment variables in production
     def __init__(self):
         super().__init__()
+        # Force SECRET_KEY to be set from environment in production
         secret_key = os.environ.get('SECRET_KEY')
         if not secret_key:
-            raise ValueError("SECRET_KEY environment variable must be set in production")
+            raise ValueError("❌ ERROR: SECRET_KEY environment variable must be set in production")
         self.SECRET_KEY = secret_key
 
 
 class TestingConfig(Config):
-    """Testing configuration"""
+    """
+    Testing configuration - for unit tests and automated testing.
+    Features: Uses separate test database, CSRF disabled for testing
+    """
     DEBUG = True
     TESTING = True
-    
-    # Use separate test database
-    DATABASE_FILE = 'test_karaoke_studio.db'
-    
-    # Disable CSRF for testing
-    WTF_CSRF_ENABLED = False
+    DATABASE_FILE = 'test_karaoke_studio.db'  # Separate from production
+    WTF_CSRF_ENABLED = False                   # Allow forms in tests
 
 
-# Configuration dictionary
+# ── Configuration Registry ────────────────────────────────────────────────
+# Maps environment names to Config classes
 config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
     'testing': TestingConfig,
-    'default': DevelopmentConfig
+    'default': DevelopmentConfig  # Default if env not specified
 }
 
 
 def get_config(config_name=None):
-    """Get configuration by name"""
+    """
+    Get configuration class by name.
+    Falls back to FLASK_ENV environment variable, then 'development'.
+    
+    Usage in app.py:
+        config = get_config(os.environ.get('FLASK_ENV', 'development'))
+        app.config.from_object(config)
+    """
     if config_name is None:
         config_name = os.environ.get('FLASK_ENV', 'development')
     
     return config.get(config_name, config['default'])
+
